@@ -3,19 +3,20 @@ import axios from 'axios';
 // First, try to connect to the default port, but if it fails, try other ports
 const findApiUrl = async () => {
   const defaultPort = 5000;
-  const portsToTry = [defaultPort, 5001, 5002, 5003, 5004];
+  const portsToTry = [defaultPort, 5001, 5002, 5003, 5004, 5005];
   
   for (const port of portsToTry) {
     try {
       const url = `http://localhost:${port}/api`;
       // Check if the server is available on this port
-      const response = await axios.get(`${url}/health`, { timeout: 1000 });
-      if (response.status === 200 && response.data.status === 'ok') {
+      console.log(`Trying API on port ${port}...`);
+      const response = await axios.get(`${url}/health`, { timeout: 1500 });
+      if (response.status === 200) {
         console.log(`API server found on port ${port}`);
         return url;
       }
     } catch (error) {
-      console.log(`API not available on port ${port}`);
+      console.log(`API not available on port ${port}: ${error.message}`);
     }
   }
   
@@ -26,13 +27,20 @@ const findApiUrl = async () => {
 
 // Initialize with default URL, then try to find the actual API URL
 let API_URL = 'http://localhost:5000/api';
-findApiUrl().then(url => {
-  API_URL = url;
-  console.log('Using API URL:', API_URL);
-  
-  // Update the baseURL of the existing API instance
-  api.defaults.baseURL = API_URL;
-});
+
+// Update the API URL and refresh the API instance
+const updateApiUrl = async () => {
+  try {
+    const url = await findApiUrl();
+    API_URL = url;
+    console.log('Using API URL:', API_URL);
+    
+    // Update the baseURL of the existing API instance
+    api.defaults.baseURL = API_URL;
+  } catch (error) {
+    console.error('Error finding API URL:', error);
+  }
+};
 
 // Create axios instance with timeout and default headers
 const api = axios.create({
@@ -55,6 +63,9 @@ api.interceptors.response.use(
     return Promise.reject(error);
   }
 );
+
+// Start the API discovery process
+updateApiUrl();
 
 export const getAirlines = async () => {
   try {
@@ -160,29 +171,41 @@ export const createReview = async (reviewData) => {
 export const updateReview = async (reviewId, reviewData) => {
   try {
     console.log('API: Updating review:', reviewId, reviewData);
-    const response = await api.put(`/reviews/${reviewId}`, reviewData);
-    console.log('API: Review updated successfully:', response.data);
+    
+    // Check if reviewData is FormData (for image uploads)
+    const isFormData = reviewData instanceof FormData;
+    
+    // Configure headers based on data type
+    const config = isFormData ? {
+      headers: {
+        'Content-Type': 'multipart/form-data'
+      }
+    } : {};
+    
+    console.log('API: Updating review with', isFormData ? 'file upload' : 'regular data');
+    
+    const response = await api.put(`/reviews/${reviewId}`, reviewData, config);
     return response.data;
   } catch (error) {
-    console.error('API: Error updating review:', error.response ? error.response.data : error.message);
+    console.error('Error updating review:', error);
     
     // Create a more user-friendly error message
-    let errorMessage = 'Failed to update review. Please try again.';
+    let message = 'Failed to update review. Please try again.';
+    
     if (error.response) {
-      // If there's a specific error from the server, use it
-      if (error.response.data && error.response.data.error) {
-        errorMessage = error.response.data.error;
-      }
-      // If it's a 403 error, provide a specific message
+      // The request was made and the server responded with a status code
+      // that falls out of the range of 2xx
       if (error.response.status === 403) {
-        errorMessage = 'You can only update your own reviews';
+        message = 'You can only update your own reviews.';
+      } else if (error.response.data && error.response.data.error) {
+        message = error.response.data.error;
       }
     }
     
-    // Create an error object with a user-friendly message
-    const userError = new Error(errorMessage);
-    userError.originalError = error;
-    throw userError;
+    // Throw a new error with the friendly message but include the original error for debugging
+    const newError = new Error(message);
+    newError.originalError = error;
+    throw newError;
   }
 };
 

@@ -64,7 +64,7 @@ const AirlineDetails = () => {
       if (i <= roundedRating) {
         stars.push(<span key={i} className="text-yellow-400 text-2xl">★</span>);
       } else {
-        stars.push(<span key={i} className="text-gray-300 text-2xl">★</span>);
+        stars.push(<span key={i} className="text-white text-2xl">★</span>);
       }
     }
     
@@ -174,8 +174,10 @@ const AirlineDetails = () => {
               <div className="text-xl font-bold text-blue-800">
                 {averageRating.toFixed(1)}/5
               </div>
-              <div className="text-sm text-gray-600">
-                {reviews.length} {reviews.length === 1 ? 'review' : 'reviews'}
+              <div className="border-t border-gray-200 w-3/4 mx-auto mt-3 pt-2">
+                <div className="text-sm text-gray-600">
+                  {reviews.length} {reviews.length === 1 ? 'review' : 'reviews'}
+                </div>
               </div>
             </div>
           </div>
@@ -282,11 +284,11 @@ const AirlineDetails = () => {
                             <p className="text-gray-700 my-4 whitespace-pre-line">{review.description}</p>
                             
                             {review.image_url && (
-                              <div className="mt-4 mb-6">
+                              <div className="mt-4 mb-6 max-w-md mx-auto">
                                 <img
                                   src={review.image_url}
                                   alt=""
-                                  className="w-full max-h-64 object-cover rounded-md"
+                                  className="w-full max-h-48 object-contain rounded-md"
                                   onError={(e) => {
                                     e.target.style.display = 'none';
                                   }}
@@ -296,7 +298,7 @@ const AirlineDetails = () => {
                           </motion.div>
                         ) : (
                           <motion.p 
-                            className="text-gray-600 line-clamp-2"
+                            className="text-gray-600 line-clamp-1"
                             initial={{ opacity: 1 }}
                             exit={{ opacity: 0 }}
                           >

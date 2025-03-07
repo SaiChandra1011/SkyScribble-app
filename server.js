@@ -3,15 +3,81 @@ import cors from 'cors';
 import dotenv from 'dotenv';
 import pool from './src/config/db.js';
 import http from 'http';
+import { fileURLToPath } from 'url';
+import path from 'path';
+import fs from 'fs';
+import multer from 'multer';
+
+// Get __dirname equivalent in ESM
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
 dotenv.config();
 
 const app = express();
 const PORT = process.env.PORT || 5000;
 
+// Ensure uploads directory exists
+const uploadsDir = path.join(__dirname, 'uploads');
+if (!fs.existsSync(uploadsDir)) {
+  fs.mkdirSync(uploadsDir, { recursive: true });
+}
+
+// Configure multer storage
+const storage = multer.diskStorage({
+  destination: function(req, file, cb) {
+    cb(null, uploadsDir);
+  },
+  filename: function(req, file, cb) {
+    // Create unique filename with original extension
+    const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
+    const ext = path.extname(file.originalname);
+    cb(null, 'image-' + uniqueSuffix + ext);
+  }
+});
+
+// File filter to only accept images
+const fileFilter = (req, file, cb) => {
+  if (file.mimetype.startsWith('image/')) {
+    cb(null, true);
+  } else {
+    cb(new Error('Only image files are allowed!'), false);
+  }
+};
+
+// Initialize multer
+const upload = multer({ 
+  storage: storage,
+  fileFilter: fileFilter,
+  limits: {
+    fileSize: 2 * 1024 * 1024 // 2MB limit (reduced from 5MB)
+  }
+});
+
+// Custom error handler for multer errors
+const handleMulterErrors = (err, req, res, next) => {
+  if (err instanceof multer.MulterError) {
+    if (err.code === 'LIMIT_FILE_SIZE') {
+      return res.status(400).json({ 
+        error: 'File too large', 
+        message: 'Image must be less than 2MB in size' 
+      });
+    }
+  }
+  next(err);
+};
+
 // Middleware
 app.use(cors());
 app.use(express.json());
+
+// Serve static files from uploads directory
+app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
+
+// Add health endpoint for API discovery
+app.get('/api/health', (req, res) => {
+  res.json({ status: 'ok', timestamp: new Date().toISOString() });
+});
 
 // Routes
 app.get('/api/airlines', async (req, res) => {
@@ -22,11 +88,11 @@ app.get('/api/airlines', async (req, res) => {
              COUNT(r.id) as review_count
       FROM airlines a
       LEFT JOIN reviews r ON a.id = r.airline_id
-      GROUP BY a.id, a.name, a.logo_url
-      ORDER BY a.name
+      GROUP BY a.id
+      ORDER BY a.name ASC
     `);
     
-    console.log("Fetched airlines:", result.rows);
+    console.log('Fetched airlines:', result.rows);
     res.json(result.rows);
   } catch (error) {
     console.error('Error fetching airlines:', error);
@@ -159,10 +225,11 @@ app.post('/api/users', async (req, res) => {
   }
 });
 
-// Create a new review
-app.post('/api/reviews', async (req, res) => {
+// Create a new review with file upload
+app.post('/api/reviews', upload.single('image'), handleMulterErrors, async (req, res) => {
   try {
     console.log('Server: Received review data:', req.body);
+    console.log('Server: Received file:', req.file);
     
     const { 
       user_id, 
@@ -171,12 +238,18 @@ app.post('/api/reviews', async (req, res) => {
       arrival_city, 
       rating, 
       heading, 
-      description, 
-      image_url 
+      description
     } = req.body;
     
     if (!user_id || !airline_id || !departure_city || !arrival_city || !rating || !heading || !description) {
       return res.status(400).json({ error: 'Missing required fields' });
+    }
+    
+    // Get the image URL if a file was uploaded
+    let image_url = null;
+    if (req.file) {
+      // Use the path that can be accessed via the server
+      image_url = `/uploads/${req.file.filename}`;
     }
     
     const result = await pool.query(
@@ -184,65 +257,88 @@ app.post('/api/reviews', async (req, res) => {
         (user_id, airline_id, departure_city, arrival_city, rating, heading, description, image_url) 
        VALUES ($1, $2, $3, $4, $5, $6, $7, $8) 
        RETURNING *`,
-      [user_id, airline_id, departure_city, arrival_city, rating, heading, description, image_url || null]
+      [user_id, airline_id, departure_city, arrival_city, rating, heading, description, image_url]
     );
     
     console.log('Server: New review created:', result.rows[0]);
     res.status(201).json(result.rows[0]);
   } catch (error) {
-    console.error('Error creating review:', error);
+    console.error('Server: Error creating review:', error);
     res.status(500).json({ error: 'Server error', message: error.message });
   }
 });
 
-// Update a review
-app.put('/api/reviews/:id', async (req, res) => {
+// Update a review with file upload
+app.put('/api/reviews/:id', upload.single('image'), handleMulterErrors, async (req, res) => {
   try {
     console.log('Server: Received update review request:', req.params.id, req.body);
-    const { id } = req.params;
+    console.log('Server: Received file for update:', req.file);
+    
+    const reviewId = req.params.id;
     const { 
-      user_id, 
-      departure_city, 
-      arrival_city, 
-      rating, 
-      heading, 
-      description, 
-      image_url 
+      user_id,
+      departure_city,
+      arrival_city,
+      rating,
+      heading,
+      description,
+      image_url
     } = req.body;
     
     // First check if the review exists and belongs to the user
-    const reviewCheck = await pool.query(
-      'SELECT * FROM reviews WHERE id = $1', 
-      [id]
+    const checkResult = await pool.query(
+      'SELECT * FROM reviews WHERE id = $1',
+      [reviewId]
     );
     
-    if (reviewCheck.rows.length === 0) {
+    if (checkResult.rows.length === 0) {
       return res.status(404).json({ error: 'Review not found' });
     }
     
-    const review = reviewCheck.rows[0];
+    const review = checkResult.rows[0];
     
-    // Ensure the user owns this review
-    if (review.user_id !== user_id) {
+    // Verify ownership
+    if (parseInt(user_id) !== review.user_id) {
       return res.status(403).json({ error: 'You can only update your own reviews' });
     }
     
+    // Determine the image URL to use
+    let finalImageUrl = review.image_url; // Default to existing image
+    
+    if (req.file) {
+      // New file was uploaded
+      finalImageUrl = `/uploads/${req.file.filename}`;
+    } else if (image_url) {
+      // Use provided image URL (might be empty string to remove image)
+      finalImageUrl = image_url;
+    }
+    
+    // Update the review
     const result = await pool.query(
       `UPDATE reviews 
-       SET departure_city = $1, arrival_city = $2, rating = $3, heading = $4, description = $5, image_url = $6
-       WHERE id = $7 AND user_id = $8
+       SET departure_city = $1, 
+           arrival_city = $2, 
+           rating = $3, 
+           heading = $4, 
+           description = $5, 
+           image_url = $6
+       WHERE id = $7 
        RETURNING *`,
-      [departure_city, arrival_city, rating, heading, description, image_url || null, id, user_id]
+      [
+        departure_city,
+        arrival_city,
+        rating,
+        heading,
+        description,
+        finalImageUrl,
+        reviewId
+      ]
     );
-    
-    if (result.rows.length === 0) {
-      return res.status(404).json({ error: 'Review not found or not yours to update' });
-    }
     
     console.log('Server: Review updated:', result.rows[0]);
     res.json(result.rows[0]);
   } catch (error) {
-    console.error('Error updating review:', error);
+    console.error('Server: Error updating review:', error);
     res.status(500).json({ error: 'Server error', message: error.message });
   }
 });

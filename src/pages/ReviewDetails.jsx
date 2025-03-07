@@ -52,7 +52,7 @@ const ReviewDetails = () => {
       if (i <= roundedRating) {
         stars.push(<span key={i} className="text-yellow-400 text-2xl">★</span>);
       } else {
-        stars.push(<span key={i} className="text-gray-300 text-2xl">★</span>);
+        stars.push(<span key={i} className="text-white text-2xl">★</span>);
       }
     }
     
@@ -135,9 +135,11 @@ const ReviewDetails = () => {
             <div className="p-6">
               <div className="flex justify-between items-start mb-6">
                 <h1 className="text-3xl font-bold text-gray-800">{review.heading}</h1>
-                <div className="flex">
-                  {renderStars(review.rating)}
-                  <span className="ml-2 text-lg font-medium text-gray-700">
+                <div className="flex flex-col items-end">
+                  <div className="flex">
+                    {renderStars(review.rating)}
+                  </div>
+                  <span className="text-lg font-medium text-gray-700 mt-1">
                     {review.rating}/5
                   </span>
                 </div>

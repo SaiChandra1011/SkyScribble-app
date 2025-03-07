@@ -25,17 +25,33 @@ const Airlines = () => {
     checkUser();
   }, []);
 
-  const fetchAirlines = async () => {
+  const fetchAirlines = async (retryCount = 0) => {
     try {
+      setLoading(true);
+      setError(null);
+      
+      console.log(`Attempt ${retryCount + 1} to fetch airlines`);
       const data = await getAirlines();
       console.log("Airlines data:", data);
       setAirlines(data);
       setLoading(false);
     } catch (err) {
       console.error("Error fetching airlines:", err);
-      setError('Failed to load airlines. Please try again later.');
+      
+      // Try up to 3 times with increasing delays
+      if (retryCount < 2) {
+        console.log(`Retrying in ${(retryCount + 1) * 1000}ms...`);
+        setTimeout(() => fetchAirlines(retryCount + 1), (retryCount + 1) * 1000);
+        return;
+      }
+      
+      setError('Failed to load airlines. Please try reloading the page.');
       setLoading(false);
     }
+  };
+
+  const retryFetchAirlines = () => {
+    fetchAirlines();
   };
 
   useEffect(() => {
@@ -90,7 +106,19 @@ const Airlines = () => {
   if (error) {
     return (
       <div className="min-h-screen flex items-center justify-center pt-16">
-        <div className="text-xl text-red-500">{error}</div>
+        <motion.div 
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          className="bg-red-100 p-4 rounded-md mb-6 max-w-xl mx-auto text-center"
+        >
+          <p className="text-red-700 mb-3">{error}</p>
+          <button
+            onClick={retryFetchAirlines}
+            className="px-4 py-2 bg-red-600 text-white rounded-md hover:bg-red-700 transition-colors"
+          >
+            Retry
+          </button>
+        </motion.div>
       </div>
     );
   }
@@ -172,7 +200,9 @@ const Airlines = () => {
                       <span className="text-lg font-medium text-gray-700">
                         {Number(airline.average_rating).toFixed(1)}/5
                       </span>
-                      <span className="text-sm text-gray-500 mt-1">
+                    </div>
+                    <div className="flex flex-col items-center border-t border-gray-200 w-3/4 mt-3 pt-2">
+                      <span className="text-sm text-gray-500">
                         {airline.review_count} {airline.review_count === 1 ? 'review' : 'reviews'}
                       </span>
                     </div>
