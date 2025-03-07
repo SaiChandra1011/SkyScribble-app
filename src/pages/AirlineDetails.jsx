@@ -2,25 +2,42 @@ import { useState, useEffect } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { getAirlineDetails } from '../services/api';
+import { getCurrentUser } from '../services/auth';
+import ReviewForm from '../components/ReviewForm';
 
 const AirlineDetails = () => {
   const { id } = useParams();
   const [airlineData, setAirlineData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+  const [user, setUser] = useState(null);
+  const [showReviewForm, setShowReviewForm] = useState(false);
 
   useEffect(() => {
-    const fetchAirlineDetails = async () => {
+    const checkUser = async () => {
       try {
-        const data = await getAirlineDetails(id);
-        setAirlineData(data);
-        setLoading(false);
-      } catch (err) {
-        setError('Failed to load airline details. Please try again later.');
-        setLoading(false);
+        const currentUser = await getCurrentUser();
+        setUser(currentUser);
+      } catch (error) {
+        console.error('Error checking authentication:', error);
       }
     };
 
+    checkUser();
+  }, []);
+
+  const fetchAirlineDetails = async () => {
+    try {
+      const data = await getAirlineDetails(id);
+      setAirlineData(data);
+      setLoading(false);
+    } catch (err) {
+      setError('Failed to load airline details. Please try again later.');
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
     fetchAirlineDetails();
   }, [id]);
 
@@ -38,6 +55,13 @@ const AirlineDetails = () => {
     }
     
     return stars;
+  };
+
+  const handleReviewSuccess = () => {
+    // Refresh airline details to show the new review
+    fetchAirlineDetails();
+    // Hide the review form
+    setShowReviewForm(false);
   };
 
   if (loading) {
@@ -89,7 +113,32 @@ const AirlineDetails = () => {
           </div>
         </motion.div>
         
-        <h2 className="text-2xl font-semibold text-gray-800 mb-6">Reviews</h2>
+        <div className="flex justify-between items-center mb-6">
+          <h2 className="text-2xl font-semibold text-gray-800">Reviews</h2>
+          
+          {user ? (
+            <button
+              onClick={() => setShowReviewForm(!showReviewForm)}
+              className="bg-blue-600 text-white px-4 py-2 rounded-md hover:bg-blue-700 transition-colors"
+            >
+              {showReviewForm ? 'Cancel' : 'Write a Review'}
+            </button>
+          ) : (
+            <div className="text-sm text-gray-600">
+              Sign in to write a review
+            </div>
+          )}
+        </div>
+        
+        {showReviewForm && user && (
+          <div className="mb-8">
+            <ReviewForm 
+              airlineId={id} 
+              userId={user.dbId} 
+              onSuccess={handleReviewSuccess} 
+            />
+          </div>
+        )}
         
         {reviews.length === 0 ? (
           <div className="bg-white rounded-lg shadow-md p-6 text-center">

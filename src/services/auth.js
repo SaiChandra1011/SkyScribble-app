@@ -4,11 +4,24 @@ import {
   onAuthStateChanged
 } from 'firebase/auth';
 import { auth, googleProvider } from '../config/firebase';
+import { createOrGetUser } from './api';
 
 export const signInWithGoogle = async () => {
   try {
     const result = await signInWithPopup(auth, googleProvider);
-    return result.user;
+    const user = result.user;
+    
+    // Store user in database
+    const userData = {
+      google_id: user.uid,
+      email: user.email,
+      display_name: user.displayName
+    };
+    
+    const dbUser = await createOrGetUser(userData);
+    
+    // Combine Firebase user with database user
+    return { ...user, dbId: dbUser.id };
   } catch (error) {
     console.error('Error signing in with Google:', error);
     throw error;
@@ -30,7 +43,23 @@ export const getCurrentUser = () => {
       auth,
       (user) => {
         unsubscribe();
-        resolve(user);
+        if (user) {
+          // If user is logged in, get their database record
+          createOrGetUser({
+            google_id: user.uid,
+            email: user.email,
+            display_name: user.displayName
+          })
+            .then(dbUser => {
+              resolve({ ...user, dbId: dbUser.id });
+            })
+            .catch(error => {
+              console.error('Error getting user from database:', error);
+              resolve(user);
+            });
+        } else {
+          resolve(null);
+        }
       },
       reject
     );

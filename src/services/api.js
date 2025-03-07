@@ -30,4 +30,24 @@ export const getReviewDetails = async (reviewId) => {
     console.error('Error fetching review details:', error);
     throw error;
   }
+};
+
+export const createOrGetUser = async (userData) => {
+  try {
+    const response = await axios.post(`${API_URL}/users`, userData);
+    return response.data;
+  } catch (error) {
+    console.error('Error creating/getting user:', error);
+    throw error;
+  }
+};
+
+export const createReview = async (reviewData) => {
+  try {
+    const response = await axios.post(`${API_URL}/reviews`, reviewData);
+    return response.data;
+  } catch (error) {
+    console.error('Error creating review:', error);
+    throw error;
+  }
 }; 

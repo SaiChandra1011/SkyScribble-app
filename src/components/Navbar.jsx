@@ -7,10 +7,12 @@ const Navbar = () => {
   const location = useLocation();
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [authLoading, setAuthLoading] = useState(false);
 
   useEffect(() => {
     const checkUser = async () => {
       try {
+        setLoading(true);
         const currentUser = await getCurrentUser();
         setUser(currentUser);
       } catch (error) {
@@ -25,19 +27,25 @@ const Navbar = () => {
 
   const handleSignIn = async () => {
     try {
+      setAuthLoading(true);
       const user = await signInWithGoogle();
       setUser(user);
     } catch (error) {
       console.error('Error signing in:', error);
+    } finally {
+      setAuthLoading(false);
     }
   };
 
   const handleSignOut = async () => {
     try {
+      setAuthLoading(true);
       await signOut();
       setUser(null);
     } catch (error) {
       console.error('Error signing out:', error);
+    } finally {
+      setAuthLoading(false);
     }
   };
 
@@ -77,26 +85,43 @@ const Navbar = () => {
             </div>
           </div>
           <div className="flex items-center">
-            {!loading && (
+            {loading ? (
+              <div className="text-sm text-gray-500">Loading...</div>
+            ) : (
               <>
                 {user ? (
                   <div className="flex items-center">
-                    <span className="text-sm text-gray-700 mr-4">
-                      {user.displayName || user.email}
-                    </span>
+                    <div className="flex items-center mr-4">
+                      {user.photoURL && (
+                        <img 
+                          src={user.photoURL} 
+                          alt="Profile" 
+                          className="w-8 h-8 rounded-full mr-2"
+                        />
+                      )}
+                      <span className="text-sm text-gray-700">
+                        {user.displayName || user.email}
+                      </span>
+                    </div>
                     <button
                       onClick={handleSignOut}
-                      className="bg-white text-gray-700 border border-gray-300 rounded-md px-4 py-2 text-sm font-medium hover:bg-gray-50"
+                      disabled={authLoading}
+                      className={`bg-white text-gray-700 border border-gray-300 rounded-md px-4 py-2 text-sm font-medium ${
+                        authLoading ? 'opacity-70 cursor-not-allowed' : 'hover:bg-gray-50'
+                      }`}
                     >
-                      Sign Out
+                      {authLoading ? 'Signing Out...' : 'Sign Out'}
                     </button>
                   </div>
                 ) : (
                   <button
                     onClick={handleSignIn}
-                    className="bg-blue-600 text-white rounded-md px-4 py-2 text-sm font-medium hover:bg-blue-700"
+                    disabled={authLoading}
+                    className={`bg-blue-600 text-white rounded-md px-4 py-2 text-sm font-medium ${
+                      authLoading ? 'opacity-70 cursor-not-allowed' : 'hover:bg-blue-700'
+                    }`}
                   >
-                    Sign In with Google
+                    {authLoading ? 'Signing In...' : 'Sign In with Google'}
                   </button>
                 )}
               </>
