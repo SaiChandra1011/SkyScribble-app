@@ -1,6 +1,5 @@
 import { useState, useEffect } from 'react';
 import { Link, useLocation } from 'react-router-dom';
-import { motion } from 'framer-motion';
 import { signInWithGoogle, signOut, getCurrentUser } from '../services/auth';
 
 const Navbar = () => {
@@ -50,59 +49,24 @@ const Navbar = () => {
   };
 
   return (
-    <motion.nav
-      initial={{ y: -100 }}
-      animate={{ y: 0 }}
-      className="bg-white shadow-md"
-    >
-      <div className="max-w-6xl mx-auto px-4">
-        <div className="flex justify-between h-16">
-          <div className="flex items-center">
-            <Link to="/" className="flex-shrink-0 flex items-center">
-              <span className="text-xl font-bold text-blue-600">AirlineReviews</span>
+    <div className="fixed top-0 left-0 w-full bg-blue-50 shadow-md z-50">
+      <div className="container mx-auto px-4">
+        <div className="flex justify-between items-center h-16">
+          <div>
+            <Link to="/" className="text-xl font-bold text-blue-600">
+              SkyScribble
             </Link>
-            <div className="hidden md:ml-6 md:flex md:space-x-8">
-              <Link
-                to="/"
-                className={`inline-flex items-center px-1 pt-1 border-b-2 text-sm font-medium ${
-                  location.pathname === '/'
-                    ? 'border-blue-500 text-gray-900'
-                    : 'border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700'
-                }`}
-              >
-                Home
-              </Link>
-              <Link
-                to="/airlines"
-                className={`inline-flex items-center px-1 pt-1 border-b-2 text-sm font-medium ${
-                  location.pathname === '/airlines' || location.pathname.startsWith('/airlines/')
-                    ? 'border-blue-500 text-gray-900'
-                    : 'border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700'
-                }`}
-              >
-                Airlines
-              </Link>
-            </div>
           </div>
-          <div className="flex items-center">
+          <div>
             {loading ? (
               <div className="text-sm text-gray-500">Loading...</div>
             ) : (
               <>
                 {user ? (
-                  <div className="flex items-center">
-                    <div className="flex items-center mr-4">
-                      {user.photoURL && (
-                        <img 
-                          src={user.photoURL} 
-                          alt="Profile" 
-                          className="w-8 h-8 rounded-full mr-2"
-                        />
-                      )}
-                      <span className="text-sm text-gray-700">
-                        {user.displayName || user.email}
-                      </span>
-                    </div>
+                  <div className="flex items-center space-x-4">
+                    <span className="text-sm text-gray-700">
+                      {user.displayName || user.email}
+                    </span>
                     <button
                       onClick={handleSignOut}
                       disabled={authLoading}
@@ -110,7 +74,7 @@ const Navbar = () => {
                         authLoading ? 'opacity-70 cursor-not-allowed' : 'hover:bg-gray-50'
                       }`}
                     >
-                      {authLoading ? 'Signing Out...' : 'Sign Out'}
+                      Sign Out
                     </button>
                   </div>
                 ) : (
@@ -121,7 +85,7 @@ const Navbar = () => {
                       authLoading ? 'opacity-70 cursor-not-allowed' : 'hover:bg-blue-700'
                     }`}
                   >
-                    {authLoading ? 'Signing In...' : 'Sign In with Google'}
+                    Sign In with Google
                   </button>
                 )}
               </>
@@ -129,7 +93,7 @@ const Navbar = () => {
           </div>
         </div>
       </div>
-    </motion.nav>
+    </div>
   );
 };
 

@@ -11,17 +11,26 @@ export const signInWithGoogle = async () => {
     const result = await signInWithPopup(auth, googleProvider);
     const user = result.user;
     
+    console.log("Google Auth successful, user:", user);
+    
     // Store user in database
     const userData = {
       google_id: user.uid,
       email: user.email,
-      display_name: user.displayName
+      display_name: user.displayName || user.email.split('@')[0]
     };
     
-    const dbUser = await createOrGetUser(userData);
+    console.log("Sending user data to database:", userData);
     
-    // Combine Firebase user with database user
-    return { ...user, dbId: dbUser.id };
+    try {
+      const dbUser = await createOrGetUser(userData);
+      console.log("Database user created/retrieved:", dbUser);
+      return { ...user, dbId: dbUser.id };
+    } catch (dbError) {
+      console.error("Failed to store user in database:", dbError);
+      // Return Firebase user even if database storage fails
+      return user;
+    }
   } catch (error) {
     console.error('Error signing in with Google:', error);
     throw error;
@@ -45,12 +54,15 @@ export const getCurrentUser = () => {
         unsubscribe();
         if (user) {
           // If user is logged in, get their database record
+          console.log("Firebase user found, retrieving from database:", user.uid);
+          
           createOrGetUser({
             google_id: user.uid,
             email: user.email,
-            display_name: user.displayName
+            display_name: user.displayName || user.email.split('@')[0]
           })
             .then(dbUser => {
+              console.log("Database user retrieved:", dbUser);
               resolve({ ...user, dbId: dbUser.id });
             })
             .catch(error => {

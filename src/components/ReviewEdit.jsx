@@ -1,23 +1,22 @@
-import { useState, useRef } from 'react';
+import { useState } from 'react';
 import { motion } from 'framer-motion';
-import { createReview } from '../services/api';
+import { updateReview } from '../services/api';
 
-const ReviewForm = ({ airlineId, userId, onSuccess }) => {
+const ReviewEdit = ({ review, userId, onSuccess, onCancel }) => {
   const [formData, setFormData] = useState({
-    departure_city: '',
-    arrival_city: '',
-    rating: 5,
-    heading: '',
-    description: '',
-    image_url: ''
+    departure_city: review.departure_city || '',
+    arrival_city: review.arrival_city || '',
+    rating: review.rating || 5,
+    heading: review.heading || '',
+    description: review.description || '',
+    image_url: review.image_url || '',
+    user_id: userId,
+    airline_id: review.airline_id
   });
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
   const [success, setSuccess] = useState(false);
   const [hoverRating, setHoverRating] = useState(0);
-  const [selectedImage, setSelectedImage] = useState(null);
-  const [imagePreview, setImagePreview] = useState(null);
-  const fileInputRef = useRef(null);
 
   const handleChange = (e) => {
     const { name, value } = e.target;
@@ -25,14 +24,9 @@ const ReviewForm = ({ airlineId, userId, onSuccess }) => {
       ...prev,
       [name]: value
     }));
-  };
-
-  const handleImageChange = (e) => {
-    if (e.target.files && e.target.files[0]) {
-      const file = e.target.files[0];
-      setSelectedImage(file);
-      setImagePreview(URL.createObjectURL(file));
-    }
+    
+    // Clear error when user makes changes
+    if (error) setError(null);
   };
 
   const handleRatingChange = (rating) => {
@@ -40,13 +34,16 @@ const ReviewForm = ({ airlineId, userId, onSuccess }) => {
       ...prev,
       rating
     }));
+    
+    // Clear error when user changes rating
+    if (error) setError(null);
   };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
     
     if (!userId) {
-      setError('You must be logged in to submit a review');
+      setError('You must be logged in to update a review');
       return;
     }
     
@@ -55,51 +52,32 @@ const ReviewForm = ({ airlineId, userId, onSuccess }) => {
       setError(null);
       setSuccess(false);
       
-      // Create a FormData object to handle the file upload
-      const formDataToSend = new FormData();
-      formDataToSend.append('user_id', userId);
-      formDataToSend.append('airline_id', airlineId);
-      formDataToSend.append('departure_city', formData.departure_city);
-      formDataToSend.append('arrival_city', formData.arrival_city);
-      formDataToSend.append('rating', formData.rating);
-      formDataToSend.append('heading', formData.heading);
-      formDataToSend.append('description', formData.description);
+      console.log("Updating review data:", {
+        ...formData,
+        user_id: userId
+      });
       
-      // Add the image file if one was selected
-      if (selectedImage) {
-        formDataToSend.append('image', selectedImage);
-      }
+      const reviewData = {
+        ...formData,
+        user_id: userId
+      };
       
-      console.log("Submitting review data with image");
-      
-      const newReview = await createReview(formDataToSend);
-      console.log("Review created successfully:", newReview);
+      await updateReview(review.id, reviewData);
+      console.log("Review updated successfully");
       
       setLoading(false);
       setSuccess(true);
       
-      // Reset form
-      setFormData({
-        departure_city: '',
-        arrival_city: '',
-        rating: 5,
-        heading: '',
-        description: '',
-        image_url: ''
-      });
-      setSelectedImage(null);
-      setImagePreview(null);
-      
       // Notify parent component of success
       if (onSuccess) {
         setTimeout(() => {
-          onSuccess(newReview);
-        }, 1500); // Show success message briefly before hiding the form
+          onSuccess();
+        }, 1000); // Show success message briefly before hiding the form
       }
     } catch (err) {
-      console.error("Error submitting review:", err);
+      console.error("Error updating review:", err);
       setLoading(false);
-      setError('Failed to submit review. Please try again.');
+      setError(err.message || 'Failed to update review. Please try again.');
     }
   };
 
@@ -134,21 +112,35 @@ const ReviewForm = ({ airlineId, userId, onSuccess }) => {
 
   return (
     <motion.div
-      initial={{ opacity: 0, y: 20 }}
-      animate={{ opacity: 1, y: 0 }}
-      className="bg-white rounded-lg shadow-md p-6"
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      className="bg-white rounded-lg shadow-md p-6 mt-4"
     >
-      <h2 className="text-2xl font-semibold text-gray-800 mb-6">Write a Review</h2>
+      <div className="flex justify-between items-center mb-4">
+        <h2 className="text-2xl font-semibold text-gray-800">Edit Review</h2>
+        <button 
+          onClick={onCancel}
+          className="text-sm text-gray-500 hover:text-gray-700"
+        >
+          Cancel
+        </button>
+      </div>
       
       {error && (
-        <div className="bg-red-100 text-red-700 p-3 rounded-md mb-4">
-          {error}
+        <div className="bg-red-100 text-red-700 p-4 rounded-md mb-4 flex justify-between items-center">
+          <div>{error}</div>
+          <button 
+            onClick={() => setError(null)} 
+            className="text-sm bg-red-200 hover:bg-red-300 px-3 py-1 rounded-md"
+          >
+            Dismiss
+          </button>
         </div>
       )}
 
       {success && (
         <div className="bg-green-100 text-green-700 p-3 rounded-md mb-4">
-          Your review was submitted successfully!
+          Your review was updated successfully!
         </div>
       )}
       
@@ -227,58 +219,28 @@ const ReviewForm = ({ airlineId, userId, onSuccess }) => {
         </div>
         
         <div className="mb-6">
-          <label className="block text-sm font-medium text-gray-700 mb-1">
-            Add Image
+          <label htmlFor="image_url" className="block text-sm font-medium text-gray-700 mb-1">
+            Image URL (Optional)
           </label>
-          
-          <div className="mt-1 flex items-center">
-            <button
-              type="button"
-              onClick={() => fileInputRef.current.click()}
-              className="inline-flex items-center px-4 py-2 border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
-            >
-              <svg className="-ml-1 mr-2 h-5 w-5 text-gray-500" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
-                <path fillRule="evenodd" d="M4 3a2 2 0 00-2 2v10a2 2 0 002 2h12a2 2 0 002-2V5a2 2 0 00-2-2H4zm12 12H4l4-8 3 6 2-4 3 6z" clipRule="evenodd" />
-              </svg>
-              Choose Image
-            </button>
-            <input
-              ref={fileInputRef}
-              type="file"
-              className="hidden"
-              onChange={handleImageChange}
-              accept="image/*"
-            />
-            
-            {selectedImage && (
-              <span className="ml-3 text-sm text-gray-600">
-                {selectedImage.name}
-              </span>
-            )}
-          </div>
-          
-          {imagePreview && (
-            <div className="mt-3">
-              <img 
-                src={imagePreview} 
-                alt="Preview" 
-                className="h-32 w-auto object-cover rounded-md border border-gray-300" 
-              />
-              <button
-                type="button"
-                onClick={() => {
-                  setSelectedImage(null);
-                  setImagePreview(null);
-                }}
-                className="mt-2 text-sm text-red-600 hover:text-red-800"
-              >
-                Remove image
-              </button>
-            </div>
-          )}
+          <input
+            type="url"
+            id="image_url"
+            name="image_url"
+            value={formData.image_url}
+            onChange={handleChange}
+            className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+            placeholder="https://example.com/my-image.jpg"
+          />
         </div>
         
-        <div className="flex justify-end">
+        <div className="flex justify-end space-x-3">
+          <button
+            type="button"
+            onClick={onCancel}
+            className="px-4 py-2 border border-gray-300 text-gray-700 rounded-md hover:bg-gray-50 transition-colors"
+          >
+            Cancel
+          </button>
           <button
             type="submit"
             disabled={loading}
@@ -286,7 +248,7 @@ const ReviewForm = ({ airlineId, userId, onSuccess }) => {
               loading ? 'bg-blue-400 cursor-not-allowed' : 'bg-blue-600 hover:bg-blue-700'
             } transition-colors`}
           >
-            {loading ? 'Submitting...' : 'Submit Review'}
+            {loading ? 'Saving...' : 'Save Changes'}
           </button>
         </div>
       </form>
@@ -294,4 +256,4 @@ const ReviewForm = ({ airlineId, userId, onSuccess }) => {
   );
 };
 
-export default ReviewForm; 
+export default ReviewEdit; 
