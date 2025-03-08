@@ -201,25 +201,55 @@ const AirlineDetails = () => {
         </div>
         
         {deleteError && (
-          <div className="bg-red-100 text-red-700 p-3 rounded-md mb-4">
-            {deleteError}
-          </div>
+          <motion.div 
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            className="bg-red-100 text-red-700 p-4 rounded-xl shadow-sm mb-6 flex justify-between items-center"
+          >
+            <p>{deleteError}</p>
+            <button 
+              onClick={() => setDeleteError(null)}
+              className="text-red-700 hover:text-red-900"
+            >
+              <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
+                <path fillRule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clipRule="evenodd" />
+              </svg>
+            </button>
+          </motion.div>
         )}
         
         {showReviewForm && user && (
-          <div className="mb-8">
+          <motion.div 
+            initial={{ opacity: 0, height: 0 }}
+            animate={{ opacity: 1, height: 'auto' }}
+            exit={{ opacity: 0, height: 0 }}
+            className="mb-8"
+          >
             <ReviewForm 
               airlineId={id} 
               userId={user.dbId} 
               onSuccess={handleReviewSuccess} 
             />
-          </div>
+          </motion.div>
         )}
         
         {reviews.length === 0 ? (
-          <div className="bg-white rounded-lg shadow-md p-6 text-center">
-            <p className="text-gray-600">No reviews yet for this airline.</p>
-          </div>
+          <motion.div 
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.2 }}
+            className="bg-white rounded-xl shadow-md p-8 text-center"
+          >
+            <p className="text-gray-600 text-lg">No reviews yet for this airline.</p>
+            {user && !showReviewForm && (
+              <button
+                onClick={() => setShowReviewForm(true)}
+                className="mt-4 text-blue-600 hover:text-blue-800 font-medium"
+              >
+                Be the first to review
+              </button>
+            )}
+          </motion.div>
         ) : (
           <motion.div
             initial="hidden"
@@ -242,7 +272,7 @@ const AirlineDetails = () => {
                   hidden: { opacity: 0, y: 20 },
                   visible: { opacity: 1, y: 0 }
                 }}
-                className="bg-white rounded-lg shadow-md overflow-hidden"
+                className="bg-white rounded-xl shadow-md overflow-hidden"
               >
                 {editingReviewId === review.id ? (
                   <ReviewEdit 
@@ -254,13 +284,13 @@ const AirlineDetails = () => {
                 ) : (
                   <>
                     <div 
-                      className="p-6 cursor-pointer hover:bg-gray-50 transition-colors"
+                      className="p-6 cursor-pointer hover:bg-blue-50 transition-all duration-200"
                       onClick={() => toggleReviewExpansion(review.id)}
                     >
-                      <div className="flex justify-between items-start mb-4">
+                      <div className="flex flex-col sm:flex-row justify-between sm:items-center gap-3 mb-4">
                         <h3 className="text-xl font-semibold text-gray-800">{review.heading}</h3>
-                        <div className="flex items-center">
-                          <div className="flex mr-2">
+                        <div className="flex items-center bg-blue-50 px-3 py-1 rounded-full">
+                          <div className="flex mr-1">
                             {renderStars(review.rating)}
                           </div>
                           <span className="text-sm font-medium text-gray-700">
@@ -269,69 +299,106 @@ const AirlineDetails = () => {
                         </div>
                       </div>
                       
-                      <div className="text-sm text-gray-500 mb-2">
-                        {review.departure_city} to {review.arrival_city}
+                      <div className="flex items-center text-sm text-gray-500 mb-3">
+                        <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
+                        </svg>
+                        <span>{review.departure_city} to {review.arrival_city}</span>
+                      </div>
+                      
+                      <div className="flex items-center justify-between">
+                        <div className="text-sm text-gray-500">
+                          {new Date(review.created_at).toLocaleDateString('en-US', {
+                            year: 'numeric',
+                            month: 'short',
+                            day: 'numeric'
+                          })}
+                        </div>
+                        <div className="text-blue-600">
+                          {expandedReviewId === review.id ? (
+                            <div className="flex items-center">
+                              <span className="text-sm mr-1">Hide details</span>
+                              <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 15l7-7 7 7" />
+                              </svg>
+                            </div>
+                          ) : (
+                            <div className="flex items-center">
+                              <span className="text-sm mr-1">Show details</span>
+                              <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                              </svg>
+                            </div>
+                          )}
+                        </div>
                       </div>
                       
                       <AnimatePresence>
-                        {expandedReviewId === review.id ? (
+                        {expandedReviewId === review.id && (
                           <motion.div
                             initial={{ opacity: 0, height: 0 }}
                             animate={{ opacity: 1, height: 'auto' }}
                             exit={{ opacity: 0, height: 0 }}
                             transition={{ duration: 0.3 }}
+                            className="mt-4 pt-4 border-t border-gray-100"
                           >
-                            <p className="text-gray-700 my-4 whitespace-pre-line">{review.description}</p>
+                            <p className="text-gray-700 mb-4 whitespace-pre-line">{review.description}</p>
                             
                             {review.image_url && (
-                              <div className="mt-4 mb-6 max-w-md mx-auto">
-                                <img
-                                  src={review.image_url}
-                                  alt=""
-                                  className="w-full max-h-48 object-contain rounded-md"
+                              <div className="mt-4 mb-4">
+                                <img 
+                                  src={review.image_url} 
+                                  alt="Review" 
+                                  className="rounded-lg max-h-96 max-w-full object-contain shadow-sm"
                                   onError={(e) => {
                                     e.target.style.display = 'none';
                                   }}
                                 />
                               </div>
                             )}
+
+                            {user && user.dbId === review.user_id && (
+                              <div className="mt-4 flex flex-wrap justify-end space-x-2">
+                                <button
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    handleEditClick(review.id);
+                                  }}
+                                  className="bg-blue-100 text-blue-700 px-4 py-2 rounded-full hover:bg-blue-200 transition-all flex items-center"
+                                >
+                                  <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 mr-1" viewBox="0 0 20 20" fill="currentColor">
+                                    <path d="M13.586 3.586a2 2 0 112.828 2.828l-.793.793-2.828-2.828.793-.793zM11.379 5.793L3 14.172V17h2.828l8.38-8.379-2.83-2.828z" />
+                                  </svg>
+                                  Edit
+                                </button>
+                                <button
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    if(window.confirm('Are you sure you want to delete this review?')) {
+                                      handleDeleteClick(review.id);
+                                    }
+                                  }}
+                                  disabled={deleteLoading}
+                                  className="bg-red-100 text-red-700 px-4 py-2 rounded-full hover:bg-red-200 transition-all flex items-center"
+                                >
+                                  {deleteLoading ? (
+                                    <span>Deleting...</span>
+                                  ) : (
+                                    <>
+                                      <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 mr-1" viewBox="0 0 20 20" fill="currentColor">
+                                        <path fillRule="evenodd" d="M9 2a1 1 0 00-.894.553L7.382 4H4a1 1 0 000 2v10a2 2 0 002 2h8a2 2 0 002-2V6a1 1 0 100-2h-3.382l-.724-1.447A1 1 0 0011 2H9zM7 8a1 1 0 012 0v6a1 1 0 11-2 0V8zm5-1a1 1 0 00-1 1v6a1 1 0 102 0V8a1 1 0 00-1-1z" clipRule="evenodd" />
+                                      </svg>
+                                      Delete
+                                    </>
+                                  )}
+                                </button>
+                              </div>
+                            )}
                           </motion.div>
-                        ) : (
-                          <motion.p 
-                            className="text-gray-600 line-clamp-1"
-                            initial={{ opacity: 1 }}
-                            exit={{ opacity: 0 }}
-                          >
-                            {review.description}
-                          </motion.p>
                         )}
                       </AnimatePresence>
                     </div>
-                    
-                    {/* User actions for their own reviews */}
-                    {user && user.dbId === review.user_id && (
-                      <div className="flex justify-end space-x-2 p-3 bg-gray-50 border-t border-gray-100">
-                        <button
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            handleEditClick(review.id);
-                          }}
-                          className="px-3 py-1 bg-blue-100 text-blue-700 rounded-md hover:bg-blue-200 transition-colors text-sm font-medium"
-                        >
-                          Update
-                        </button>
-                        <button
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            handleDeleteClick(review.id);
-                          }}
-                          disabled={deleteLoading}
-                          className="px-3 py-1 bg-red-100 text-red-700 rounded-md hover:bg-red-200 transition-colors text-sm font-medium"
-                        >
-                          {deleteLoading ? 'Deleting...' : 'Delete'}
-                        </button>
-                      </div>
-                    )}
                   </>
                 )}
               </motion.div>

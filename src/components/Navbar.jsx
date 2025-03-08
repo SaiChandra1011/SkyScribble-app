@@ -51,20 +51,20 @@ const Navbar = () => {
   return (
     <div className="fixed top-0 left-0 w-full bg-blue-50 shadow-md z-50">
       <div className="container mx-auto px-4">
-        <div className="flex justify-between items-center h-16">
-          <div>
+        <div className="flex items-center h-16">
+          <div className="flex-1">
             <Link to="/" className="text-xl font-bold text-blue-600">
               SkyScribble
             </Link>
           </div>
-          <div>
+          <div className="flex items-center justify-end">
             {loading ? (
               <div className="text-sm text-gray-500">Loading...</div>
             ) : (
               <>
                 {user ? (
-                  <div className="flex items-center space-x-4">
-                    <span className="text-sm text-gray-700">
+                  <div className="flex items-center">
+                    <span className="text-sm text-gray-700 mr-4">
                       {user.displayName || user.email}
                     </span>
                     <button
