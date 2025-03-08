@@ -1,7 +1,7 @@
 import axios from 'axios';
 
-// Fixed API URL on port 5000 (the default port in server.js)
-const API_URL = 'http://localhost:5000/api';
+// Add this at the top of your api.js file
+const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000/api';
 console.log('Using fixed API URL:', API_URL);
 
 // Create axios instance with timeout and default headers
