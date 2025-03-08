@@ -76,7 +76,11 @@ app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
 
 // Add health endpoint for API discovery
 app.get('/api/health', (req, res) => {
-  res.json({ status: 'ok', timestamp: new Date().toISOString() });
+  res.json({ 
+    status: 'ok', 
+    message: 'Server is running',
+    timestamp: new Date().toISOString() 
+  });
 });
 
 // Routes
@@ -136,32 +140,60 @@ app.post('/api/airlines', async (req, res) => {
   }
 });
 
+// Get details for a specific airline including its reviews
 app.get('/api/airlines/:id', async (req, res) => {
   try {
     const { id } = req.params;
+    
+    // Get airline details
     const airlineResult = await pool.query('SELECT * FROM airlines WHERE id = $1', [id]);
     
     if (airlineResult.rows.length === 0) {
       return res.status(404).json({ error: 'Airline not found' });
     }
     
+    const airline = airlineResult.rows[0];
+    
+    // Get reviews for this airline, sorted by creation date (newest first)
     const reviewsResult = await pool.query(`
-      SELECT r.*, u.display_name as user_name
+      SELECT r.*, u.display_name
       FROM reviews r
       JOIN users u ON r.user_id = u.id
       WHERE r.airline_id = $1
       ORDER BY r.created_at DESC
     `, [id]);
     
-    console.log(`Fetched airline ${id} with ${reviewsResult.rows.length} reviews`);
+    // Filter out any potential duplicate reviews (same heading and user_id)
+    const uniqueReviews = [];
+    const seen = new Map();
     
-    res.json({
-      airline: airlineResult.rows[0],
-      reviews: reviewsResult.rows
-    });
+    for (const review of reviewsResult.rows) {
+      // Create a unique key for the review
+      const key = `${review.user_id}:${review.heading}`;
+      
+      if (!seen.has(key)) {
+        seen.set(key, true);
+        uniqueReviews.push(review);
+      } else {
+        console.log(`Filtered out duplicate review: ${review.heading} by user ${review.user_id}`);
+      }
+    }
+    
+    // Add reviews to airline object
+    airline.reviews = uniqueReviews;
+    
+    // Calculate average rating
+    if (uniqueReviews.length > 0) {
+      const sum = uniqueReviews.reduce((acc, review) => acc + parseInt(review.rating), 0);
+      airline.average_rating = (sum / uniqueReviews.length).toFixed(1);
+    } else {
+      airline.average_rating = 0;
+    }
+    
+    res.json(airline);
   } catch (error) {
     console.error('Error fetching airline details:', error);
-    res.status(500).json({ error: 'Server error' });
+    res.status(500).json({ error: 'Server error', message: error.message });
   }
 });
 
@@ -226,45 +258,152 @@ app.post('/api/users', async (req, res) => {
 });
 
 // Create a new review with file upload
-app.post('/api/reviews', upload.single('image'), handleMulterErrors, async (req, res) => {
+app.post('/api/reviews', upload.single('image'), async (req, res) => {
+  // Start a database transaction
+  let client = null;
+  
   try {
-    console.log('Server: Received review data:', req.body);
-    console.log('Server: Received file:', req.file);
+    client = await pool.connect();
     
-    const { 
-      user_id, 
-      airline_id, 
-      departure_city, 
-      arrival_city, 
-      rating, 
-      heading, 
-      description
-    } = req.body;
+    await client.query('BEGIN');
     
-    if (!user_id || !airline_id || !departure_city || !arrival_city || !rating || !heading || !description) {
-      return res.status(400).json({ error: 'Missing required fields' });
+    console.log("Review creation request received");
+    console.log("Request body:", req.body);
+    console.log("File:", req.file);
+    
+    // Validate required fields with better error responses
+    if (!req.body.airline_id) {
+      if (client) await client.query('ROLLBACK');
+      return res.status(400).json({ message: 'Airline ID is required' });
     }
     
-    // Get the image URL if a file was uploaded
-    let image_url = null;
-    if (req.file) {
-      // Use the path that can be accessed via the server
-      image_url = `/uploads/${req.file.filename}`;
+    // Ensure user_id is valid
+    if (!req.body.user_id) {
+      if (client) await client.query('ROLLBACK');
+      return res.status(400).json({ message: 'User ID is required' });
     }
     
-    const result = await pool.query(
-      `INSERT INTO reviews 
-        (user_id, airline_id, departure_city, arrival_city, rating, heading, description, image_url) 
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8) 
-       RETURNING *`,
-      [user_id, airline_id, departure_city, arrival_city, rating, heading, description, image_url]
+    // Ensure user_id is a valid integer
+    const userId = parseInt(req.body.user_id, 10);
+    if (isNaN(userId) || userId <= 0) {
+      if (client) await client.query('ROLLBACK');
+      return res.status(400).json({ message: 'Invalid User ID' });
+    }
+    
+    if (!req.body.departure_city) {
+      if (client) await client.query('ROLLBACK');
+      return res.status(400).json({ message: 'Departure city is required' });
+    }
+    if (!req.body.arrival_city) {
+      if (client) await client.query('ROLLBACK');
+      return res.status(400).json({ message: 'Arrival city is required' });
+    }
+    if (!req.body.heading) {
+      if (client) await client.query('ROLLBACK');
+      return res.status(400).json({ message: 'Review heading is required' });
+    }
+    if (!req.body.description) {
+      if (client) await client.query('ROLLBACK');
+      return res.status(400).json({ message: 'Review description is required' });
+    }
+    if (!req.body.rating) {
+      if (client) await client.query('ROLLBACK');
+      return res.status(400).json({ message: 'Rating is required' });
+    }
+
+    // Check if user exists
+    const userResult = await client.query('SELECT * FROM users WHERE id = $1', [userId]);
+    if (userResult.rows.length === 0) {
+      await client.query('ROLLBACK');
+      return res.status(404).json({ message: 'User not found' });
+    }
+
+    // Check if airline exists
+    const airlineResult = await client.query('SELECT * FROM airlines WHERE id = $1', [req.body.airline_id]);
+    if (airlineResult.rows.length === 0) {
+      await client.query('ROLLBACK');
+      return res.status(404).json({ message: 'Airline not found' });
+    }
+    
+    // Check for duplicate review (same user, airline, heading within last 10 minutes)
+    const tenMinutesAgo = new Date(Date.now() - 10 * 60 * 1000);
+    const duplicateCheck = await client.query(
+      `SELECT * FROM reviews 
+       WHERE user_id = $1 
+       AND airline_id = $2 
+       AND heading = $3
+       AND created_at > $4`,
+      [userId, req.body.airline_id, req.body.heading, tenMinutesAgo]
     );
     
-    console.log('Server: New review created:', result.rows[0]);
-    res.status(201).json(result.rows[0]);
+    if (duplicateCheck.rows.length > 0) {
+      console.log('Duplicate review detected, returning existing review');
+      await client.query('COMMIT');
+      return res.status(200).json({
+        ...duplicateCheck.rows[0],
+        message: 'This review was already submitted',
+        success: true
+      });
+    }
+
+    let imageUrl = null;
+    if (req.file) {
+      // Handle file upload (if needed)
+      imageUrl = `/uploads/${req.file.filename}`;
+    }
+
+    // Insert review into database
+    const result = await client.query(
+      'INSERT INTO reviews (user_id, airline_id, departure_city, arrival_city, rating, heading, description, image_url) VALUES ($1, $2, $3, $4, $5, $6, $7, $8) RETURNING *',
+      [
+        userId, // Use the parsed integer
+        req.body.airline_id,
+        req.body.departure_city,
+        req.body.arrival_city,
+        req.body.rating,
+        req.body.heading,
+        req.body.description,
+        imageUrl
+      ]
+    );
+
+    // Commit the transaction
+    await client.query('COMMIT');
+
+    console.log("Review created successfully:", result.rows[0]);
+    
+    // Return a success response with review data
+    res.status(201).json({
+      ...result.rows[0],
+      success: true
+    });
   } catch (error) {
-    console.error('Server: Error creating review:', error);
-    res.status(500).json({ error: 'Server error', message: error.message });
+    // Rollback in case of error
+    if (client) {
+      try {
+        await client.query('ROLLBACK');
+      } catch (rollbackError) {
+        console.error('Error during transaction rollback:', rollbackError);
+      }
+    }
+    
+    console.error('Error creating review:', error);
+    
+    // Send a more helpful error message
+    res.status(500).json({ 
+      message: 'Error creating review. Please try again.', 
+      error: error.message,
+      success: false 
+    });
+  } finally {
+    // Release the client back to the pool
+    if (client) {
+      try {
+        client.release();
+      } catch (releaseError) {
+        console.error('Error releasing client:', releaseError);
+      }
+    }
   }
 });
 
@@ -388,25 +527,20 @@ app.delete('/api/reviews/:id', async (req, res) => {
   }
 });
 
-// Health check endpoint
-app.get('/api/health', (req, res) => {
-  res.json({ status: 'ok', message: 'Server is running' });
-});
-
 // Error handler
 app.use((err, req, res, next) => {
   console.error('Unhandled error:', err);
   res.status(500).json({ error: 'Server error', message: err.message });
 });
 
-// Function to try different ports if the chosen one is busy
+// Start the server
 const startServer = (port) => {
   const server = http.createServer(app);
   
   server.on('error', (error) => {
     if (error.code === 'EADDRINUSE') {
-      console.warn(`Port ${port} is in use, trying ${port + 1}`);
-      startServer(port + 1);
+      console.error(`Port ${port} is already in use. Please close the application using this port and try again.`);
+      process.exit(1);
     } else {
       console.error('Server error:', error);
     }
@@ -417,30 +551,11 @@ const startServer = (port) => {
     console.log(`API URL: http://localhost:${port}/api`);
   });
   
-  // Handle server shutdown gracefully
-  process.on('SIGTERM', () => {
-    console.log('SIGTERM received, shutting down server');
-    server.close(() => {
-      console.log('Server closed');
-      pool.end().then(() => {
-        console.log('Database pool closed');
-        process.exit(0);
-      });
-    });
-  });
-  
-  // Handle uncaught exceptions
-  process.on('uncaughtException', (err) => {
-    console.error('Uncaught exception:', err);
-    server.close(() => {
-      pool.end().then(() => {
-        process.exit(1);
-      });
-    });
-  });
-  
   return server;
 };
 
-// Start the server
-startServer(PORT); 
+// Start the server with the defined PORT
+startServer(PORT);
+
+// Export for testing
+export default app; 

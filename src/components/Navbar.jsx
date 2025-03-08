@@ -49,51 +49,80 @@ const Navbar = () => {
   };
 
   return (
-    <div className="fixed top-0 left-0 w-full bg-blue-50 shadow-md z-50">
-      <div className="container mx-auto px-4">
-        <div className="flex items-center h-16">
-          <div className="flex-1">
-            <Link to="/" className="text-xl font-bold text-blue-600">
-              SkyScribble
-            </Link>
-          </div>
-          <div className="flex items-center justify-end">
-            {loading ? (
-              <div className="text-sm text-gray-500">Loading...</div>
-            ) : (
-              <>
-                {user ? (
-                  <div className="flex items-center">
-                    <span className="text-sm text-gray-700 mr-4">
-                      {user.displayName || user.email}
-                    </span>
-                    <button
-                      onClick={handleSignOut}
-                      disabled={authLoading}
-                      className={`bg-white text-gray-700 border border-gray-300 rounded-md px-4 py-2 text-sm font-medium ${
-                        authLoading ? 'opacity-70 cursor-not-allowed' : 'hover:bg-gray-50'
-                      }`}
-                    >
-                      Sign Out
-                    </button>
-                  </div>
-                ) : (
+    <header className="fixed top-0 left-0 right-0 shadow-md z-50" style={{ 
+      backgroundColor: '#4285F4',
+      width: '100%',
+      overflowX: 'hidden'
+    }}>
+      <div style={{ 
+        display: 'flex', 
+        width: '100%', 
+        height: '64px', 
+        alignItems: 'center', 
+        justifyContent: 'space-between', 
+        padding: '0 20px',
+        boxSizing: 'border-box'
+      }}>
+        {/* Logo - extreme left */}
+        <div>
+          <Link to="/" style={{ fontSize: '28px', fontWeight: 'bold', color: 'white', textDecoration: 'none' }}>
+            SkyScribble
+          </Link>
+        </div>
+        
+        {/* Auth section - extreme right */}
+        <div>
+          {loading ? (
+            <div style={{ color: 'white', fontSize: '14px' }}>Loading...</div>
+          ) : (
+            <>
+              {user ? (
+                <div style={{ display: 'flex', alignItems: 'center' }}>
+                  <span style={{ color: 'white', fontSize: '14px', marginRight: '16px' }}>
+                    {user.displayName || user.email}
+                  </span>
                   <button
-                    onClick={handleSignIn}
+                    onClick={handleSignOut}
                     disabled={authLoading}
-                    className={`bg-blue-600 text-white rounded-md px-4 py-2 text-sm font-medium ${
-                      authLoading ? 'opacity-70 cursor-not-allowed' : 'hover:bg-blue-700'
-                    }`}
+                    style={{
+                      backgroundColor: 'white',
+                      color: '#dc2626',
+                      borderRadius: '4px',
+                      padding: '8px 16px',
+                      fontSize: '14px',
+                      fontWeight: '500',
+                      border: 'none',
+                      cursor: authLoading ? 'not-allowed' : 'pointer',
+                      opacity: authLoading ? 0.7 : 1
+                    }}
                   >
-                    Sign In with Google
+                    Sign Out
                   </button>
-                )}
-              </>
-            )}
-          </div>
+                </div>
+              ) : (
+                <button
+                  onClick={handleSignIn}
+                  disabled={authLoading}
+                  style={{
+                    backgroundColor: 'white',
+                    color: '#dc2626',
+                    borderRadius: '4px',
+                    padding: '8px 16px',
+                    fontSize: '14px',
+                    fontWeight: '500',
+                    border: 'none',
+                    cursor: authLoading ? 'not-allowed' : 'pointer',
+                    opacity: authLoading ? 0.7 : 1
+                  }}
+                >
+                  Sign In with Google
+                </button>
+              )}
+            </>
+          )}
         </div>
       </div>
-    </div>
+    </header>
   );
 };
 

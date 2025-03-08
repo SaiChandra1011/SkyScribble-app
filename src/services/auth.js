@@ -63,11 +63,17 @@ export const getCurrentUser = () => {
           })
             .then(dbUser => {
               console.log("Database user retrieved:", dbUser);
-              resolve({ ...user, dbId: dbUser.id });
+              // Ensure we use 'id' consistently, not 'dbId'
+              resolve({ 
+                ...user, 
+                id: dbUser.id, // Use 'id' as the property name
+                dbId: dbUser.id, // Keep dbId for backward compatibility
+                dbUser: dbUser // Include the full DB user object
+              });
             })
             .catch(error => {
               console.error('Error getting user from database:', error);
-              resolve(user);
+              resolve(user); // This user won't have an 'id' property
             });
         } else {
           resolve(null);

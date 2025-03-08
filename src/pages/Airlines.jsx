@@ -10,7 +10,7 @@ const Airlines = () => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [user, setUser] = useState(null);
-  const [showAirlineForm, setShowAirlineForm] = useState(false);
+  const [showForm, setShowForm] = useState(false);
 
   useEffect(() => {
     const checkUser = async () => {
@@ -18,34 +18,34 @@ const Airlines = () => {
         const currentUser = await getCurrentUser();
         setUser(currentUser);
       } catch (error) {
-        console.error('Error checking authentication:', error);
+        console.error('Error checking user:', error);
       }
     };
 
     checkUser();
+    fetchAirlines();
   }, []);
 
   const fetchAirlines = async (retryCount = 0) => {
     try {
       setLoading(true);
       setError(null);
-      
-      console.log(`Attempt ${retryCount + 1} to fetch airlines`);
       const data = await getAirlines();
-      console.log("Airlines data:", data);
       setAirlines(data);
-      setLoading(false);
-    } catch (err) {
-      console.error("Error fetching airlines:", err);
+    } catch (error) {
+      console.error('Error fetching airlines:', error);
       
-      // Try up to 3 times with increasing delays
-      if (retryCount < 2) {
-        console.log(`Retrying in ${(retryCount + 1) * 1000}ms...`);
-        setTimeout(() => fetchAirlines(retryCount + 1), (retryCount + 1) * 1000);
-        return;
+      // Only show the error if we've retried a few times
+      if (retryCount >= 2) {
+        setError('Unable to load airlines. Please try again later.');
+      } else {
+        // Retry with exponential backoff
+        const retryDelay = Math.pow(2, retryCount) * 1000; // 1s, 2s, 4s, etc.
+        setTimeout(() => {
+          fetchAirlines(retryCount + 1);
+        }, retryDelay);
       }
-      
-      setError('Failed to load airlines. Please try reloading the page.');
+    } finally {
       setLoading(false);
     }
   };
@@ -54,164 +54,195 @@ const Airlines = () => {
     fetchAirlines();
   };
 
-  useEffect(() => {
-    fetchAirlines();
-  }, []);
-
-  const container = {
-    hidden: { opacity: 0 },
-    show: {
-      opacity: 1,
-      transition: {
-        staggerChildren: 0.1
-      }
-    }
-  };
-
-  const item = {
-    hidden: { opacity: 0, y: 20 },
-    show: { opacity: 1, y: 0 }
-  };
-
-  // Function to handle successful airline creation
-  const handleAirlineSuccess = (newAirline) => {
-    fetchAirlines(); // Refresh the airlines list
-    setShowAirlineForm(false); // Hide the form
-  };
-
-  // Function to render stars based on rating
-  const renderStars = (rating) => {
-    const stars = [];
-    const roundedRating = Math.round(rating);
-    
-    for (let i = 1; i <= 5; i++) {
-      if (i <= roundedRating) {
-        stars.push(<span key={i} className="text-yellow-400 text-2xl">★</span>);
-      } else {
-        stars.push(<span key={i} className="text-gray-300 text-2xl">★</span>);
-      }
-    }
-    
-    return stars;
+  const toggleForm = () => {
+    setShowForm(!showForm);
   };
 
   if (loading) {
     return (
-      <div className="min-h-screen flex items-center justify-center pt-16">
-        <div className="text-xl text-blue-600">Loading airlines...</div>
+      <div className="container mx-auto px-4 py-20">
+        <div className="flex justify-center items-center h-64">
+          <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-blue-500"></div>
+        </div>
       </div>
     );
   }
 
   if (error) {
     return (
-      <div className="min-h-screen flex items-center justify-center pt-16">
-        <motion.div 
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          className="bg-red-100 p-4 rounded-md mb-6 max-w-xl mx-auto text-center"
-        >
-          <p className="text-red-700 mb-3">{error}</p>
+      <div className="container mx-auto px-4 py-20">
+        <div className="flex flex-col items-center justify-center h-64">
+          <p className="text-red-500 mb-4">{error}</p>
           <button
             onClick={retryFetchAirlines}
-            className="px-4 py-2 bg-red-600 text-white rounded-md hover:bg-red-700 transition-colors"
+            className="bg-blue-500 text-white py-2 px-4 rounded hover:bg-blue-600"
           >
             Retry
           </button>
-        </motion.div>
+        </div>
       </div>
     );
   }
 
+  const handleAirlineSuccess = (newAirline) => {
+    setAirlines([...airlines, newAirline]);
+    setShowForm(false);
+  };
+
+  const renderStars = (rating) => {
+    const stars = [];
+    const fullStars = Math.floor(rating);
+    
+    // Create 5 stars
+    for (let i = 1; i <= 5; i++) {
+      if (i <= fullStars) {
+        // Filled star (golden) for ratings
+        stars.push(
+          <span 
+            key={i} 
+            style={{ 
+              color: '#FFCC00', // Golden yellow color
+              fontSize: '1.2rem',
+              margin: '0 1px'
+            }}
+          >
+            ★
+          </span>
+        );
+      } else {
+        // Empty star (outlined) for remaining positions
+        stars.push(
+          <span 
+            key={i} 
+            style={{ 
+              color: '#D1D5DB', // Light gray for outline
+              fontSize: '1.2rem',
+              margin: '0 1px'
+            }}
+          >
+            ☆
+          </span>
+        );
+      }
+    }
+
+    return stars;
+  };
+
   return (
-    <div className="min-h-screen bg-gray-50 py-12 px-4 pt-24">
-      <div className="max-w-6xl mx-auto">
-        <div className="flex justify-between items-center mb-8">
-          <motion.div
-            initial={{ opacity: 0, y: -20 }}
-            animate={{ opacity: 1, y: 0 }}
-            className="text-left"
-          >
-            <h1 className="text-3xl font-bold text-blue-900 mb-2">
-              Airline Reviews
-            </h1>
-            <p className="text-gray-600">
-              Browse or add airlines to review
-            </p>
-          </motion.div>
-          
-          {user && (
-            <motion.div
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              transition={{ delay: 0.3 }}
-            >
+    <div className="container mx-auto px-4 py-20">
+      {/* Centered header elements */}
+      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', marginBottom: '2rem' }}>
+        <h1 style={{ fontSize: '2.5rem', fontWeight: 'bold', marginBottom: '1rem', textAlign: 'center' }}>
+          Airline Reviews
+        </h1>
+        <p style={{ color: '#4b5563', marginBottom: '1.5rem', textAlign: 'center' }}>
+          Browse or add airlines to review
+        </p>
+        
+        {user && (
+          <div style={{ display: 'flex', justifyContent: 'center', width: '100%' }}>
+            {showForm ? (
+              <AirlineForm onSuccess={handleAirlineSuccess} onCancel={toggleForm} />
+            ) : (
               <button
-                onClick={() => setShowAirlineForm(!showAirlineForm)}
-                className="bg-blue-600 text-white px-4 py-2 rounded-md hover:bg-blue-700 transition-colors"
+                onClick={toggleForm}
+                style={{
+                  backgroundColor: '#3b82f6',
+                  color: 'white',
+                  padding: '0.5rem 1.5rem',
+                  borderRadius: '0.25rem',
+                  fontWeight: '500',
+                  border: 'none',
+                  cursor: 'pointer'
+                }}
               >
-                {showAirlineForm ? 'Cancel' : 'Add New Airline'}
+                Add New Airline
               </button>
-            </motion.div>
-          )}
-        </div>
-        
-        {showAirlineForm && user && (
-          <AirlineForm 
-            onSuccess={handleAirlineSuccess} 
-            onCancel={() => setShowAirlineForm(false)} 
-          />
-        )}
-        
-        {airlines.length === 0 ? (
-          <div className="bg-white rounded-lg shadow-md p-6 text-center">
-            <p className="text-gray-600">No airlines found. Add one to get started!</p>
+            )}
           </div>
-        ) : (
-          <motion.div
-            variants={container}
-            initial="hidden"
-            animate="show"
-            className="grid gap-6 md:grid-cols-2 lg:grid-cols-3"
-          >
-            {airlines.map((airline) => (
-              <motion.div
-                key={airline.id}
-                variants={item}
-                className="bg-white rounded-lg shadow-md overflow-hidden hover:shadow-lg transition-shadow"
-              >
-                <Link to={`/airlines/${airline.id}`} className="block p-6">
-                  <div className="flex items-center justify-between mb-4">
-                    <div className="flex items-center">
-                      <div className="w-12 h-12 bg-blue-100 rounded-full flex items-center justify-center mr-4">
-                        <span className="text-blue-800 font-bold text-lg">
-                          {airline.name.slice(0, 2).toUpperCase()}
-                        </span>
-                      </div>
-                      <h2 className="text-xl font-semibold text-gray-800">{airline.name}</h2>
-                    </div>
-                  </div>
-                  
-                  <div className="flex flex-col items-center justify-center p-4 bg-gray-50 rounded-lg">
-                    <div className="flex mb-2">
-                      {renderStars(airline.average_rating)}
-                    </div>
-                    <div className="flex flex-col items-center">
-                      <span className="text-lg font-medium text-gray-700">
-                        {Number(airline.average_rating).toFixed(1)}/5
-                      </span>
-                    </div>
-                    <div className="flex flex-col items-center border-t border-gray-200 w-3/4 mt-3 pt-2">
-                      <span className="text-sm text-gray-500">
-                        {airline.review_count} {airline.review_count === 1 ? 'review' : 'reviews'}
-                      </span>
-                    </div>
-                  </div>
-                </Link>
-              </motion.div>
-            ))}
-          </motion.div>
         )}
+      </div>
+
+      {/* Modified airline grid to show exactly 2 boxes per row */}
+      <div style={{ 
+        display: 'grid', 
+        gridTemplateColumns: 'repeat(2, 1fr)', 
+        gap: '1.5rem',
+        width: '100%',
+        maxWidth: '1200px',
+        margin: '0 auto'
+      }}>
+        {airlines.map((airline) => (
+          <Link
+            key={airline.id}
+            to={`/airlines/${airline.id}`}
+            style={{
+              display: 'block',
+              textDecoration: 'none',
+              transition: 'transform 0.3s ease'
+            }}
+          >
+            <div style={{
+              backgroundColor: 'white',
+              borderRadius: '0.5rem',
+              boxShadow: '0 1px 3px 0 rgba(0, 0, 0, 0.1), 0 1px 2px 0 rgba(0, 0, 0, 0.06)',
+              overflow: 'hidden',
+              border: '1px solid #e5e7eb',
+              padding: '1.5rem'
+            }}>
+              <h2 style={{ 
+                fontSize: '1.25rem', 
+                fontWeight: '600', 
+                marginBottom: '0.75rem', 
+                color: '#3b82f6' 
+              }}>
+                {airline.name}
+              </h2>
+              
+              {/* Star rating display */}
+              <div style={{ display: 'flex', justifyContent: 'center', marginBottom: '0.5rem' }}>
+                {renderStars(airline.average_rating)}
+              </div>
+              
+              <div style={{ 
+                display: 'flex', 
+                flexDirection: 'column', 
+                alignItems: 'center'
+              }}>
+                <span style={{ 
+                  fontSize: '1.125rem', 
+                  fontWeight: '500', 
+                  color: '#4b5563' 
+                }}>
+                  {Number(airline.average_rating).toFixed(1)}/5
+                </span>
+                
+                <div style={{ 
+                  fontSize: '0.875rem', 
+                  color: '#6b7280', 
+                  marginTop: '0.5rem', 
+                  borderTop: '1px solid #e5e7eb', 
+                  paddingTop: '0.5rem', 
+                  width: '100%', 
+                  textAlign: 'center' 
+                }}>
+                  {airline.review_count} {airline.review_count === 1 ? 'review' : 'reviews'}
+                </div>
+              </div>
+              
+              {/* Airline code without label */}
+              <p style={{ 
+                fontSize: '0.875rem', 
+                color: '#6b7280', 
+                marginTop: '0.75rem',
+                textAlign: 'center'
+              }}>
+                {airline.code}
+              </p>
+            </div>
+          </Link>
+        ))}
       </div>
     </div>
   );

@@ -160,8 +160,8 @@ const ReviewDetails = () => {
               
               {review.image_url && (
                 <div className="mt-6 mb-8">
-                  <img 
-                    src={review.image_url} 
+                  <img
+                    src={review.image_url}
                     alt=""
                     className="w-full max-h-96 object-cover rounded-md"
                     onError={(e) => {

@@ -1,88 +1,169 @@
 import { useState, useEffect } from 'react';
-import { useParams, Link } from 'react-router-dom';
+import { useParams, useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
-import { getAirlineDetails, deleteReview } from '../services/api';
+import { getAirlineDetails, deleteReview, checkServerEndpoint } from '../services/api';
 import { getCurrentUser } from '../services/auth';
 import ReviewForm from '../components/ReviewForm';
 import ReviewEdit from '../components/ReviewEdit';
 
 const AirlineDetails = () => {
   const { id } = useParams();
-  const [airlineData, setAirlineData] = useState(null);
+  const navigate = useNavigate();
+  const [airline, setAirline] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [user, setUser] = useState(null);
   const [showReviewForm, setShowReviewForm] = useState(false);
-  const [expandedReviewId, setExpandedReviewId] = useState(null);
   const [editingReviewId, setEditingReviewId] = useState(null);
-  const [deleteLoading, setDeleteLoading] = useState(false);
-  const [deleteError, setDeleteError] = useState(null);
+  const [expandedReviews, setExpandedReviews] = useState({});
 
   useEffect(() => {
     const checkUser = async () => {
       try {
         const currentUser = await getCurrentUser();
-        setUser(currentUser);
+        console.log("Current user in AirlineDetails:", currentUser);
+        
+        if (currentUser) {
+          if (!currentUser.id) {
+            console.error('User object is missing the ID property:', currentUser);
+          } else {
+            console.log('User ID found:', currentUser.id);
+          }
+          setUser(currentUser);
+        } else {
+          console.log('No user is currently logged in');
+          setUser(null);
+        }
       } catch (error) {
-        console.error('Error checking authentication:', error);
+        console.error('Error checking user:', error);
+        setUser(null);
       }
     };
 
     checkUser();
-  }, []);
-
-  const fetchAirlineDetails = async () => {
-    try {
-      const data = await getAirlineDetails(id);
-      console.log("Airline details data:", data);
-      setAirlineData(data);
-      setLoading(false);
-    } catch (err) {
-      console.error("Error fetching airline details:", err);
-      setError('Failed to load airline details. Please try again later.');
-      setLoading(false);
-    }
-  };
-
-  useEffect(() => {
     fetchAirlineDetails();
   }, [id]);
 
-  // Function to calculate average rating
-  const calculateAverageRating = (reviews) => {
-    if (!reviews || reviews.length === 0) return 0;
-    const total = reviews.reduce((sum, review) => sum + review.rating, 0);
-    return total / reviews.length;
+  const fetchAirlineDetails = async () => {
+    try {
+      setLoading(true);
+      setError(null);
+      console.log("Fetching airline details for ID:", id);
+      const data = await getAirlineDetails(id);
+      console.log("Airline details fetched:", data);
+      
+      // Sort reviews by date (newest first) and remove duplicates
+      if (data && data.reviews && data.reviews.length > 0) {
+        // First, sort by created_at (newest first)
+        data.reviews.sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
+        
+        // Then remove duplicates based on heading and user_id
+        const uniqueReviews = [];
+        const seen = new Set();
+        
+        data.reviews.forEach(review => {
+          // Create a unique key for each review based on user_id and heading
+          const key = `${review.user_id}-${review.heading}`;
+          if (!seen.has(key)) {
+            seen.add(key);
+            uniqueReviews.push(review);
+          } else {
+            console.log('Filtered out duplicate review:', review.heading);
+          }
+        });
+        
+        // Replace the reviews array with our filtered one
+        data.reviews = uniqueReviews;
+      }
+      
+      setAirline(data);
+    } catch (error) {
+      console.error('Error fetching airline details:', error);
+      setError('Failed to load airline details. Please ensure the server is running on port 5000.');
+    } finally {
+      setLoading(false);
+    }
   };
 
-  // Function to render stars based on rating
+  const calculateAverageRating = (reviews) => {
+    if (!reviews || reviews.length === 0) return 0;
+    const sum = reviews.reduce((total, review) => total + parseFloat(review.rating), 0);
+    return sum / reviews.length;
+  };
+
   const renderStars = (rating) => {
     const stars = [];
-    const roundedRating = Math.round(rating);
+    const fullStars = Math.floor(rating);
     
     for (let i = 1; i <= 5; i++) {
-      if (i <= roundedRating) {
-        stars.push(<span key={i} className="text-yellow-400 text-2xl">★</span>);
+      if (i <= fullStars) {
+        stars.push(
+          <span 
+            key={i} 
+            style={{ 
+              color: '#FFD700', // Gold color
+              fontSize: '1.2rem',
+              margin: '0 1px'
+            }}
+          >
+            ★
+          </span>
+        );
       } else {
-        stars.push(<span key={i} className="text-white text-2xl">★</span>);
+        stars.push(
+          <span 
+            key={i} 
+            style={{ 
+              color: '#D1D5DB', // Light gray for outline
+              fontSize: '1.2rem',
+              margin: '0 1px'
+            }}
+          >
+            ☆
+          </span>
+        );
       }
     }
-    
+
     return stars;
   };
 
+  const truncateText = (text, maxLength = 60) => {
+    if (!text || text.length <= maxLength) return text;
+    return text.substring(0, maxLength) + '...';
+  };
+
   const handleReviewSuccess = () => {
-    // Refresh airline details to show the new review
-    fetchAirlineDetails();
-    // Hide the review form and edit form
+    console.log("Review submitted successfully, refreshing data...");
+    
+    // Hide the review form
     setShowReviewForm(false);
-    setEditingReviewId(null);
+    
+    // Show loading indicator
+    setLoading(true);
+    
+    // Set a small timeout before refreshing to allow the database to update
+    setTimeout(() => {
+      // Force a full refetch of airline details
+      fetchAirlineDetails()
+        .then(() => {
+          // Scroll back to top after refresh is complete
+          window.scrollTo({ top: 0, behavior: 'smooth' });
+        })
+        .catch(err => {
+          console.error('Error refreshing airline details after review submission:', err);
+          // Even if there's an error, don't show it to the user as the review was submitted
+          // Just reload the page directly
+          window.location.reload();
+        })
+        .finally(() => {
+          setLoading(false);
+        });
+    }, 1000);
   };
 
   const handleEditClick = (reviewId) => {
     setEditingReviewId(reviewId);
-    // Close any expanded view
-    setExpandedReviewId(null);
   };
 
   const handleCancelEdit = () => {
@@ -90,322 +171,267 @@ const AirlineDetails = () => {
   };
 
   const handleDeleteClick = async (reviewId) => {
-    if (!window.confirm('Are you sure you want to delete this review? This action cannot be undone.')) {
+    if (!window.confirm('Are you sure you want to delete this review?')) {
       return;
     }
-    
+
     try {
-      setDeleteLoading(true);
-      setDeleteError(null);
-      
-      await deleteReview(reviewId, user.dbId);
-      console.log('Review deleted successfully');
-      
-      // Refresh the airline details
+      await deleteReview(reviewId, user?.id);
       fetchAirlineDetails();
-      
-      setDeleteLoading(false);
-    } catch (err) {
-      console.error('Error deleting review:', err);
-      setDeleteError('Failed to delete review. Please try again.');
-      setDeleteLoading(false);
+    } catch (error) {
+      console.error('Error deleting review:', error);
+      alert('Failed to delete review. Please try again.');
     }
   };
 
   const toggleReviewExpansion = (reviewId) => {
-    // Don't allow toggling while editing
-    if (editingReviewId !== null) return;
-    
-    if (expandedReviewId === reviewId) {
-      setExpandedReviewId(null); // Collapse if already expanded
-    } else {
-      setExpandedReviewId(reviewId); // Expand this review
-    }
+    setExpandedReviews(prev => ({
+      ...prev,
+      [reviewId]: !prev[reviewId]
+    }));
+  };
+
+  const toggleReviewForm = () => {
+    setShowReviewForm(!showReviewForm);
   };
 
   if (loading) {
     return (
-      <div className="min-h-screen flex items-center justify-center pt-16">
-        <div className="text-xl text-blue-600">Loading airline details...</div>
+      <div className="container mx-auto px-4 py-20">
+        <div className="flex justify-center items-center h-64">
+          <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-blue-500"></div>
+        </div>
       </div>
     );
   }
 
   if (error) {
     return (
-      <div className="min-h-screen flex items-center justify-center pt-16">
-        <div className="text-xl text-red-500">{error}</div>
+      <div className="container mx-auto px-4 py-20">
+        <div className="flex flex-col items-center justify-center h-64">
+          <p className="text-red-500 mb-4">{error}</p>
+          <button
+            onClick={fetchAirlineDetails}
+            className="bg-blue-500 text-white py-2 px-4 rounded hover:bg-blue-600"
+          >
+            Retry
+          </button>
+        </div>
       </div>
     );
   }
 
-  const { airline, reviews } = airlineData;
-  const averageRating = calculateAverageRating(reviews);
+  if (!airline) {
+    return (
+      <div className="container mx-auto px-4 py-20">
+        <p className="text-center">Airline not found.</p>
+      </div>
+    );
+  }
 
   return (
-    <div className="min-h-screen bg-gray-50 py-12 px-4 pt-24">
-      <div className="max-w-5xl mx-auto">
-        <Link 
-          to="/airlines" 
-          className="inline-flex items-center text-blue-600 mb-6 hover:underline"
-        >
-          ← Back to Airlines
-        </Link>
-        
-        <motion.div
-          initial={{ opacity: 0, y: -20 }}
-          animate={{ opacity: 1, y: 0 }}
-          className="bg-white rounded-lg shadow-md p-6 mb-8"
-        >
-          <div className="flex flex-col md:flex-row md:items-center justify-between">
-            <div className="flex items-center mb-4 md:mb-0">
-              <div className="w-16 h-16 bg-blue-100 rounded-full flex items-center justify-center mr-4">
-                <span className="text-blue-800 font-bold text-xl">
-                  {airline.name.slice(0, 2).toUpperCase()}
-                </span>
-              </div>
-              <h1 className="text-3xl font-bold text-gray-800">{airline.name}</h1>
-            </div>
-            
-            <div className="bg-blue-50 rounded-lg p-4 text-center">
-              <div className="text-2xl mb-1 flex justify-center">
-                {renderStars(averageRating)}
-              </div>
-              <div className="text-xl font-bold text-blue-800">
-                {averageRating.toFixed(1)}/5
-              </div>
-              <div className="border-t border-gray-200 w-3/4 mx-auto mt-3 pt-2">
-                <div className="text-sm text-gray-600">
-                  {reviews.length} {reviews.length === 1 ? 'review' : 'reviews'}
-                </div>
-              </div>
-            </div>
+    <div className="container mx-auto px-4 py-20">
+      <div className="bg-white rounded-lg shadow-md p-6 mb-8">
+        <h1 className="text-3xl font-bold mb-4 text-blue-600">{airline.name}</h1>
+        <div className="flex items-center mb-4">
+          <div className="flex mr-2">
+            {renderStars(calculateAverageRating(airline.reviews))}
           </div>
-        </motion.div>
-        
-        <div className="flex justify-between items-center mb-6">
-          <h2 className="text-2xl font-semibold text-gray-800">Reviews</h2>
-          
-          {user ? (
-            <button
-              onClick={() => setShowReviewForm(!showReviewForm)}
-              className="bg-blue-600 text-white px-4 py-2 rounded-md hover:bg-blue-700 transition-colors"
-            >
-              {showReviewForm ? 'Cancel' : 'Write a Review'}
-            </button>
-          ) : (
-            <div className="text-sm text-gray-600">
-              Sign in to write a review
-            </div>
-          )}
+          <span className="text-gray-700">
+            ({calculateAverageRating(airline.reviews).toFixed(1)}/5 from {airline.reviews.length} {airline.reviews.length === 1 ? 'review' : 'reviews'})
+          </span>
         </div>
         
-        {deleteError && (
-          <motion.div 
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            className="bg-red-100 text-red-700 p-4 rounded-xl shadow-sm mb-6 flex justify-between items-center"
-          >
-            <p>{deleteError}</p>
-            <button 
-              onClick={() => setDeleteError(null)}
-              className="text-red-700 hover:text-red-900"
-            >
-              <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
-                <path fillRule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clipRule="evenodd" />
-              </svg>
-            </button>
-          </motion.div>
-        )}
-        
-        {showReviewForm && user && (
-          <motion.div 
-            initial={{ opacity: 0, height: 0 }}
-            animate={{ opacity: 1, height: 'auto' }}
-            exit={{ opacity: 0, height: 0 }}
-            className="mb-8"
-          >
-            <ReviewForm 
-              airlineId={id} 
-              userId={user.dbId} 
-              onSuccess={handleReviewSuccess} 
-            />
-          </motion.div>
-        )}
-        
-        {reviews.length === 0 ? (
-          <motion.div 
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.2 }}
-            className="bg-white rounded-xl shadow-md p-8 text-center"
-          >
-            <p className="text-gray-600 text-lg">No reviews yet for this airline.</p>
-            {user && !showReviewForm && (
+        <p className="text-gray-600 mb-4">{airline.code}</p>
+
+        {user ? (
+          <div className="mt-6">
+            {showReviewForm ? (
+              <ReviewForm
+                airlineId={id}
+                userId={user.id}
+                onSuccess={handleReviewSuccess}
+                onCancel={() => setShowReviewForm(false)}
+              />
+            ) : (
               <button
-                onClick={() => setShowReviewForm(true)}
-                className="mt-4 text-blue-600 hover:text-blue-800 font-medium"
+                onClick={toggleReviewForm}
+                className="bg-blue-500 text-white py-2 px-6 rounded hover:bg-blue-600 transition-colors duration-300"
               >
-                Be the first to review
+                Write a Review
               </button>
             )}
-          </motion.div>
+          </div>
         ) : (
-          <motion.div
-            initial="hidden"
-            animate="visible"
-            variants={{
-              hidden: { opacity: 0 },
-              visible: {
-                opacity: 1,
-                transition: {
-                  staggerChildren: 0.1
-                }
-              }
-            }}
-            className="space-y-6"
-          >
-            {reviews.map((review) => (
-              <motion.div
-                key={review.id}
-                variants={{
-                  hidden: { opacity: 0, y: 20 },
-                  visible: { opacity: 1, y: 0 }
-                }}
-                className="bg-white rounded-xl shadow-md overflow-hidden"
-              >
-                {editingReviewId === review.id ? (
-                  <ReviewEdit 
-                    review={review}
-                    userId={user?.dbId}
-                    onSuccess={handleReviewSuccess}
-                    onCancel={handleCancelEdit}
-                  />
-                ) : (
-                  <>
-                    <div 
-                      className="p-6 cursor-pointer hover:bg-blue-50 transition-all duration-200"
-                      onClick={() => toggleReviewExpansion(review.id)}
-                    >
-                      <div className="flex flex-col sm:flex-row justify-between sm:items-center gap-3 mb-4">
-                        <h3 className="text-xl font-semibold text-gray-800">{review.heading}</h3>
-                        <div className="flex items-center bg-blue-50 px-3 py-1 rounded-full">
-                          <div className="flex mr-1">
-                            {renderStars(review.rating)}
-                          </div>
-                          <span className="text-sm font-medium text-gray-700">
-                            {review.rating}/5
-                          </span>
-                        </div>
+          <div className="mt-6">
+            <p className="text-gray-700 mb-2">
+              You must be logged in to submit a review.
+            </p>
+          </div>
+        )}
+      </div>
+
+      <h2 className="text-2xl font-bold mb-6 text-gray-800">Reviews</h2>
+
+      {airline.reviews.length === 0 ? (
+        <p className="text-gray-600 italic">No reviews yet. Be the first to review!</p>
+      ) : (
+        <div className="space-y-6">
+          {airline.reviews.map(review => (
+            <div key={review.id}>
+              {editingReviewId === review.id ? (
+                <ReviewEdit
+                  review={review}
+                  userId={user?.id}
+                  onSuccess={() => {
+                    setEditingReviewId(null);
+                    fetchAirlineDetails();
+                  }}
+                  onCancel={handleCancelEdit}
+                />
+              ) : (
+                <motion.div
+                  initial={{ opacity: 0, y: 20 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ duration: 0.3 }}
+                  className="cursor-pointer"
+                  onClick={() => toggleReviewExpansion(review.id)}
+                >
+                  <div 
+                    style={{ 
+                      backgroundColor: '#4a89dc', 
+                      borderRadius: '10px', 
+                      padding: '20px',
+                      color: 'white',
+                      boxShadow: '0 4px 12px rgba(74, 137, 220, 0.2)',
+                      transition: 'all 0.3s ease'
+                    }}
+                  >
+                    <h3 style={{ fontSize: '1.25rem', fontWeight: 'bold', marginBottom: '10px' }}>
+                      {review.heading}
+                    </h3>
+                    
+                    <div style={{ display: 'flex', marginBottom: '12px' }}>
+                      {renderStars(review.rating)}
+                    </div>
+                    
+                    <div style={{ display: 'flex', alignItems: 'center', marginBottom: '12px' }}>
+                      <span style={{ marginRight: '8px', fontSize: '1.25rem' }}>📍</span>
+                      <span>{review.departure_city} to {review.arrival_city}</span>
+                    </div>
+                    
+                    <div style={{ display: 'flex', alignItems: 'flex-start', marginBottom: '12px' }}>
+                      <span style={{ marginRight: '8px', fontSize: '1.25rem', marginTop: '2px' }}>💬</span>
+                      <span>{truncateText(review.description, 60)}</span>
+                    </div>
+                    
+                    <div style={{ display: 'flex', alignItems: 'center', marginTop: '15px' }}>
+                      <span style={{ marginRight: '8px', fontSize: '1.25rem' }}>👤</span>
+                      <span>Reviewed by {review.display_name || 'Anonymous'}</span>
+                    </div>
+                    
+                    {user && user.id === review.user_id && (
+                      <div style={{ 
+                        display: 'flex',
+                        justifyContent: 'flex-end',
+                        marginTop: '15px',
+                        paddingTop: '10px',
+                        borderTop: '1px solid rgba(255,255,255,0.2)',
+                      }}>
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleEditClick(review.id);
+                          }}
+                          style={{
+                            backgroundColor: 'white',
+                            color: '#4a89dc',
+                            padding: '6px 12px',
+                            borderRadius: '4px',
+                            fontWeight: '500',
+                            marginRight: '10px',
+                            border: 'none',
+                            cursor: 'pointer'
+                          }}
+                        >
+                          Update
+                        </button>
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleDeleteClick(review.id);
+                          }}
+                          style={{
+                            backgroundColor: 'rgba(255,255,255,0.15)',
+                            color: 'white',
+                            padding: '6px 12px',
+                            borderRadius: '4px',
+                            fontWeight: '500',
+                            border: 'none',
+                            cursor: 'pointer'
+                          }}
+                        >
+                          Delete
+                        </button>
                       </div>
-                      
-                      <div className="flex items-center text-sm text-gray-500 mb-3">
-                        <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
-                        </svg>
-                        <span>{review.departure_city} to {review.arrival_city}</span>
-                      </div>
-                      
-                      <div className="flex items-center justify-between">
-                        <div className="text-sm text-gray-500">
-                          {new Date(review.created_at).toLocaleDateString('en-US', {
-                            year: 'numeric',
-                            month: 'short',
-                            day: 'numeric'
-                          })}
-                        </div>
-                        <div className="text-blue-600">
-                          {expandedReviewId === review.id ? (
-                            <div className="flex items-center">
-                              <span className="text-sm mr-1">Hide details</span>
-                              <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 15l7-7 7 7" />
-                              </svg>
+                    )}
+                    
+                    <AnimatePresence>
+                      {expandedReviews[review.id] && (
+                        <motion.div
+                          initial={{ opacity: 0, height: 0 }}
+                          animate={{ opacity: 1, height: 'auto' }}
+                          exit={{ opacity: 0, height: 0 }}
+                          transition={{ duration: 0.3 }}
+                        >
+                          <div style={{ marginTop: '15px' }}>
+                            <div style={{ 
+                              display: 'flex', 
+                              flexDirection: 'column',
+                              marginBottom: '15px',
+                              borderTop: '1px solid rgba(255,255,255,0.2)',
+                              paddingTop: '15px'
+                            }}>
+                              <h4 style={{ fontWeight: 'bold', marginBottom: '8px' }}>Full Description:</h4>
+                              <p>{review.description}</p>
                             </div>
-                          ) : (
-                            <div className="flex items-center">
-                              <span className="text-sm mr-1">Show details</span>
-                              <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-                              </svg>
-                            </div>
-                          )}
-                        </div>
-                      </div>
-                      
-                      <AnimatePresence>
-                        {expandedReviewId === review.id && (
-                          <motion.div
-                            initial={{ opacity: 0, height: 0 }}
-                            animate={{ opacity: 1, height: 'auto' }}
-                            exit={{ opacity: 0, height: 0 }}
-                            transition={{ duration: 0.3 }}
-                            className="mt-4 pt-4 border-t border-gray-100"
-                          >
-                            <p className="text-gray-700 mb-4 whitespace-pre-line">{review.description}</p>
                             
                             {review.image_url && (
-                              <div className="mt-4 mb-4">
+                              <div style={{ marginTop: '15px', textAlign: 'left' }}>
                                 <img 
                                   src={review.image_url} 
                                   alt="Review" 
-                                  className="rounded-lg max-h-96 max-w-full object-contain shadow-sm"
-                                  onError={(e) => {
-                                    e.target.style.display = 'none';
-                                  }}
+                                  style={{ 
+                                    maxWidth: '80%', 
+                                    maxHeight: '200px',
+                                    borderRadius: '8px',
+                                    boxShadow: '0 2px 8px rgba(0,0,0,0.15)'
+                                  }} 
                                 />
                               </div>
                             )}
-
-                            {user && user.dbId === review.user_id && (
-                              <div className="mt-4 flex flex-wrap justify-end space-x-2">
-                                <button
-                                  onClick={(e) => {
-                                    e.stopPropagation();
-                                    handleEditClick(review.id);
-                                  }}
-                                  className="bg-blue-100 text-blue-700 px-4 py-2 rounded-full hover:bg-blue-200 transition-all flex items-center"
-                                >
-                                  <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 mr-1" viewBox="0 0 20 20" fill="currentColor">
-                                    <path d="M13.586 3.586a2 2 0 112.828 2.828l-.793.793-2.828-2.828.793-.793zM11.379 5.793L3 14.172V17h2.828l8.38-8.379-2.83-2.828z" />
-                                  </svg>
-                                  Edit
-                                </button>
-                                <button
-                                  onClick={(e) => {
-                                    e.stopPropagation();
-                                    if(window.confirm('Are you sure you want to delete this review?')) {
-                                      handleDeleteClick(review.id);
-                                    }
-                                  }}
-                                  disabled={deleteLoading}
-                                  className="bg-red-100 text-red-700 px-4 py-2 rounded-full hover:bg-red-200 transition-all flex items-center"
-                                >
-                                  {deleteLoading ? (
-                                    <span>Deleting...</span>
-                                  ) : (
-                                    <>
-                                      <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 mr-1" viewBox="0 0 20 20" fill="currentColor">
-                                        <path fillRule="evenodd" d="M9 2a1 1 0 00-.894.553L7.382 4H4a1 1 0 000 2v10a2 2 0 002 2h8a2 2 0 002-2V6a1 1 0 100-2h-3.382l-.724-1.447A1 1 0 0011 2H9zM7 8a1 1 0 012 0v6a1 1 0 11-2 0V8zm5-1a1 1 0 00-1 1v6a1 1 0 102 0V8a1 1 0 00-1-1z" clipRule="evenodd" />
-                                      </svg>
-                                      Delete
-                                    </>
-                                  )}
-                                </button>
-                              </div>
-                            )}
-                          </motion.div>
-                        )}
-                      </AnimatePresence>
+                          </div>
+                        </motion.div>
+                      )}
+                    </AnimatePresence>
+                    
+                    <div 
+                      style={{ 
+                        display: 'flex', 
+                        justifyContent: 'center', 
+                        marginTop: '10px',
+                        color: 'rgba(255,255,255,0.7)'
+                      }}
+                    >
+                      {expandedReviews[review.id] ? 'Click to collapse' : 'Click to expand'}
                     </div>
-                  </>
-                )}
-              </motion.div>
-            ))}
-          </motion.div>
-        )}
-      </div>
+                  </div>
+                </motion.div>
+              )}
+            </div>
+          ))}
+        </div>
+      )}
     </div>
   );
 };

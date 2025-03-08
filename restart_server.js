@@ -10,34 +10,32 @@ const restartServer = async () => {
     // For Windows
     if (process.platform === 'win32') {
       console.log('Killing processes on port 5000...');
-      await execAsync('powershell -Command "Stop-Process -Id (Get-NetTCPConnection -LocalPort 5000 -ErrorAction SilentlyContinue).OwningProcess -Force -ErrorAction SilentlyContinue"');
+      try {
+        await execAsync('powershell -Command "Stop-Process -Id (Get-NetTCPConnection -LocalPort 5000 -ErrorAction SilentlyContinue).OwningProcess -Force -ErrorAction SilentlyContinue"');
+        console.log('Successfully killed process on port 5000');
+      } catch (error) {
+        console.log('No process running on port 5000');
+      }
+      
       console.log('Killing nodemon processes...');
-      await execAsync('powershell -Command "Get-Process | Where-Object {$_.Name -eq \'node\' -and $_.CommandLine -like \'*nodemon*\'} | Stop-Process -Force -ErrorAction SilentlyContinue"');
+      try {
+        await execAsync('powershell -Command "Get-Process | Where-Object {$_.Name -eq \'node\' -and $_.CommandLine -like \'*nodemon*\'} | Stop-Process -Force -ErrorAction SilentlyContinue"');
+        console.log('Successfully killed nodemon processes');
+      } catch (error) {
+        console.log('No nodemon processes running');
+      }
     } else {
       // For Linux/Mac
       console.log('Killing processes on port 5000...');
       await execAsync('lsof -ti:5000 | xargs kill -9 || true');
     }
 
-    console.log('All conflicting processes killed');
+    // Start the server
     console.log('Starting server...');
-    
-    // Start server in a new process
-    const child = exec('npm run dev:server');
-    
-    child.stdout.on('data', (data) => {
-      console.log(`Server: ${data}`);
-    });
-    
-    child.stderr.on('data', (data) => {
-      console.error(`Server Error: ${data}`);
-    });
-    
-    console.log('✅ Server restart process completed!');
-    console.log('Check server logs for successful startup.');
+    await execAsync('npm run server');
     
   } catch (error) {
-    console.error('Error during restart:', error);
+    console.error('Error during server restart:', error);
   }
 };
 

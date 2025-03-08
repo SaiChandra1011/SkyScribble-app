@@ -1,46 +1,8 @@
 import axios from 'axios';
 
-// First, try to connect to the default port, but if it fails, try other ports
-const findApiUrl = async () => {
-  const defaultPort = 5000;
-  const portsToTry = [defaultPort, 5001, 5002, 5003, 5004, 5005];
-  
-  for (const port of portsToTry) {
-    try {
-      const url = `http://localhost:${port}/api`;
-      // Check if the server is available on this port
-      console.log(`Trying API on port ${port}...`);
-      const response = await axios.get(`${url}/health`, { timeout: 1500 });
-      if (response.status === 200) {
-        console.log(`API server found on port ${port}`);
-        return url;
-      }
-    } catch (error) {
-      console.log(`API not available on port ${port}: ${error.message}`);
-    }
-  }
-  
-  // Default to the standard port if we can't find the server
-  console.warn('Could not find API server, defaulting to port 5000');
-  return 'http://localhost:5000/api';
-};
-
-// Initialize with default URL, then try to find the actual API URL
-let API_URL = 'http://localhost:5000/api';
-
-// Update the API URL and refresh the API instance
-const updateApiUrl = async () => {
-  try {
-    const url = await findApiUrl();
-    API_URL = url;
-    console.log('Using API URL:', API_URL);
-    
-    // Update the baseURL of the existing API instance
-    api.defaults.baseURL = API_URL;
-  } catch (error) {
-    console.error('Error finding API URL:', error);
-  }
-};
+// Fixed API URL on port 5000 (the default port in server.js)
+const API_URL = 'http://localhost:5000/api';
+console.log('Using fixed API URL:', API_URL);
 
 // Create axios instance with timeout and default headers
 const api = axios.create({
@@ -63,9 +25,6 @@ api.interceptors.response.use(
     return Promise.reject(error);
   }
 );
-
-// Start the API discovery process
-updateApiUrl();
 
 export const getAirlines = async () => {
   try {
@@ -148,23 +107,34 @@ export const createOrGetUser = async (userData) => {
 
 export const createReview = async (reviewData) => {
   try {
-    // Check if reviewData is FormData (for image uploads)
-    const isFormData = reviewData instanceof FormData;
+    console.log("Submitting review data");
     
-    // Configure headers based on data type
-    const config = isFormData ? {
+    // Use the already configured api instance with axios instead of fetch
+    // We need a special config for FormData
+    const config = {
       headers: {
         'Content-Type': 'multipart/form-data'
       }
-    } : {};
+    };
     
-    console.log('API: Creating review with', isFormData ? 'file upload' : 'regular data');
+    // Create a simplified object to log (FormData isn't easily loggable)
+    const formDataEntries = {};
+    for (let [key, value] of reviewData.entries()) {
+      // Don't log the actual file contents, just note that it exists
+      formDataEntries[key] = key === 'image' ? 'File data present' : value;
+    }
+    console.log("Form data entries:", formDataEntries);
     
+    // Make the API request using axios instead of fetch
     const response = await api.post('/reviews', reviewData, config);
+    
+    console.log("Review submission successful:", response.data);
     return response.data;
   } catch (error) {
-    console.error('Error creating review:', error);
-    throw error;
+    console.error("API Error in createReview:", error);
+    
+    // Rethrow with a more user-friendly message
+    throw new Error("Failed to submit review. Please try again.");
   }
 };
 
@@ -218,5 +188,38 @@ export const deleteReview = async (reviewId, userId) => {
   } catch (error) {
     console.error('API: Error deleting review:', error.response ? error.response.data : error.message);
     throw error;
+  }
+};
+
+export const checkServerEndpoint = async () => {
+  try {
+    console.log("Checking API availability at:", API_URL);
+    
+    const response = await fetch(`${API_URL}/health`, {
+      method: 'GET',
+      credentials: 'include',
+      // Add a short timeout to avoid hanging
+      signal: AbortSignal.timeout(2000)
+    });
+    
+    if (!response.ok) {
+      console.error('API health check failed:', response.status);
+      return {
+        available: false,
+        status: response.status,
+        message: response.statusText
+      };
+    }
+    
+    return {
+      available: true,
+      status: response.status
+    };
+  } catch (error) {
+    console.error('API health check error:', error);
+    return {
+      available: false,
+      error: error.message
+    };
   }
 }; 
