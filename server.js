@@ -71,7 +71,7 @@ const handleMulterErrors = (err, req, res, next) => {
 
 // Middleware
 app.use(cors({
-  origin: process.env.CORS_ORIGIN || '*',
+  origin: ['https://sky-scribble-app.vercel.app/', process.env.CORS_ORIGIN || '*'],
   methods: ['GET', 'POST', 'PUT', 'DELETE'],
   credentials: true
 }));

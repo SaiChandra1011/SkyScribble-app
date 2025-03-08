@@ -1,21 +1,30 @@
-import pg from 'pg';
+import pkg from 'pg';
+const { Pool } = pkg;
 import dotenv from 'dotenv';
 
 // Load environment variables
 dotenv.config();
 
-const { Pool } = pg;
+let pool;
 
-// Create a new database connection pool with explicit configuration
-const pool = new Pool({
-  user: process.env.PGUSER || 'postgres',
-  host: process.env.PGHOST || 'localhost',
-  database: process.env.PGDATABASE || 'airline_reviews',
-  password: process.env.PGPASSWORD || 'Datawork10!',
-  port: parseInt(process.env.PGPORT || '5432', 10),
-  // Add connection timeout
-  connectionTimeoutMillis: 5000,
-});
+// Use DATABASE_URL for production environments (like Render)
+if (process.env.DATABASE_URL) {
+  pool = new Pool({
+    connectionString: process.env.DATABASE_URL,
+    ssl: { rejectUnauthorized: false }
+  });
+  console.log('Using production database connection');
+} else {
+  // Local development configuration
+  pool = new Pool({
+    user: process.env.DB_USER || 'postgres',
+    password: process.env.DB_PASSWORD || 'admin',
+    host: process.env.DB_HOST || 'localhost',
+    port: process.env.DB_PORT || 5432,
+    database: process.env.DB_NAME || 'airline_reviews'
+  });
+  console.log('Using local database connection');
+}
 
 // Test the database connection
 pool.on('error', (err) => {

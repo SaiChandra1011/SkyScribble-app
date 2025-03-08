@@ -1,8 +1,9 @@
 import axios from 'axios';
 
 // Use environment variable for API URL
+console.log('Environment variables:', import.meta.env);
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000/api';
-console.log('Using fixed API URL:', API_URL);
+console.log('Using API URL:', API_URL);
 
 // Create an axios instance with the API_URL as the base URL
 const api = axios.create({
@@ -10,7 +11,8 @@ const api = axios.create({
   timeout: 10000, // 10 seconds
   headers: {
     'Content-Type': 'application/json'
-  }
+  },
+  withCredentials: true // Enable cookies for cross-origin requests
 });
 
 // Add response interceptor for better error handling
