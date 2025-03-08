@@ -1,10 +1,10 @@
 import axios from 'axios';
 
-// Add this at the top of your api.js file
+// Use environment variable for API URL
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000/api';
 console.log('Using fixed API URL:', API_URL);
 
-// Create axios instance with timeout and default headers
+// Create an axios instance with the API_URL as the base URL
 const api = axios.create({
   baseURL: API_URL,
   timeout: 10000, // 10 seconds
