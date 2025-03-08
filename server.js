@@ -7,6 +7,7 @@ import { fileURLToPath } from 'url';
 import path from 'path';
 import fs from 'fs';
 import multer from 'multer';
+import { Pool } from 'pg';
 
 // Get __dirname equivalent in ESM
 const __filename = fileURLToPath(import.meta.url);
@@ -68,7 +69,12 @@ const handleMulterErrors = (err, req, res, next) => {
 };
 
 // Middleware
-app.use(cors());
+app.use(cors({
+  origin: process.env.NODE_ENV === 'production' 
+    ? ['https://your-frontend-url.vercel.app', 'https://skyscribbler.com'] 
+    : 'http://localhost:5173',
+  credentials: true
+}));
 app.use(express.json());
 
 // Serve static files from uploads directory

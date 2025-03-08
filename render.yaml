@@ -1,0 +1,13 @@
+services:
+  - type: web
+    name: skyscribble-api
+    env: node
+    buildCommand: npm install
+    startCommand: node server.js
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: PORT
+        value: 10000
+      - key: DATABASE_URL
+        value: your-database-connection-string-here
