@@ -11,11 +11,16 @@ const Airlines = () => {
   const [error, setError] = useState(null);
   const [user, setUser] = useState(null);
   const [showForm, setShowForm] = useState(false);
+  
+  console.log('Airlines component mounting, env:', import.meta.env);
 
   useEffect(() => {
+    console.log('Airlines useEffect running');
     const checkUser = async () => {
       try {
+        console.log('Checking current user...');
         const currentUser = await getCurrentUser();
+        console.log('Current user:', currentUser);
         setUser(currentUser);
       } catch (error) {
         console.error('Error checking user:', error);
@@ -28,12 +33,21 @@ const Airlines = () => {
 
   const fetchAirlines = async (retryCount = 0) => {
     try {
+      console.log('Fetching airlines, attempt:', retryCount + 1);
       setLoading(true);
       setError(null);
       const data = await getAirlines();
+      console.log('Airlines data received:', data);
       setAirlines(data);
     } catch (error) {
       console.error('Error fetching airlines:', error);
+      console.error('Error details:', {
+        message: error.message,
+        response: error.response ? {
+          status: error.response.status,
+          data: error.response.data
+        } : 'No response'
+      });
       
       // Only show the error if we've retried a few times
       if (retryCount >= 2) {
@@ -41,6 +55,7 @@ const Airlines = () => {
       } else {
         // Retry with exponential backoff
         const retryDelay = Math.pow(2, retryCount) * 1000; // 1s, 2s, 4s, etc.
+        console.log(`Retrying in ${retryDelay}ms...`);
         setTimeout(() => {
           fetchAirlines(retryCount + 1);
         }, retryDelay);

@@ -2,7 +2,7 @@ import axios from 'axios';
 
 // Use environment variable for API URL
 console.log('Environment variables:', import.meta.env);
-const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000/api';
+const API_URL = import.meta.env.VITE_API_URL || 'https://skyscribble-app.onrender.com/api';
 console.log('Using API URL:', API_URL);
 
 // Create an axios instance with the API_URL as the base URL
@@ -15,14 +15,30 @@ const api = axios.create({
   withCredentials: true // Enable cookies for cross-origin requests
 });
 
+// Log all requests in development
+api.interceptors.request.use(
+  (config) => {
+    console.log('API Request:', config.method.toUpperCase(), config.url);
+    return config;
+  },
+  (error) => {
+    return Promise.reject(error);
+  }
+);
+
 // Add response interceptor for better error handling
 api.interceptors.response.use(
-  (response) => response,
+  (response) => {
+    console.log('API Response:', response.status, response.config.url);
+    return response;
+  },
   (error) => {
     console.error('API Error:', error.message);
     if (error.response) {
       console.error('Response data:', error.response.data);
       console.error('Response status:', error.response.status);
+    } else if (error.request) {
+      console.error('No response received:', error.request);
     }
     return Promise.reject(error);
   }
