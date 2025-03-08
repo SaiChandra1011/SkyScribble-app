@@ -4,7 +4,7 @@ import dotenv from 'dotenv';
 import pool from './src/config/db.js';
 import http from 'http';
 import { fileURLToPath } from 'url';
-import path from 'path';
+import { dirname, join } from 'path';
 import fs from 'fs';
 import multer from 'multer';
 import pkg from 'pg';
@@ -12,7 +12,7 @@ const { Pool } = pkg;
 
 // Get __dirname equivalent in ESM
 const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
+const __dirname = dirname(__filename);
 
 dotenv.config();
 
@@ -20,7 +20,7 @@ const app = express();
 const PORT = process.env.PORT || 5000;
 
 // Ensure uploads directory exists
-const uploadsDir = path.join(__dirname, 'uploads');
+const uploadsDir = join(__dirname, 'uploads');
 if (!fs.existsSync(uploadsDir)) {
   fs.mkdirSync(uploadsDir, { recursive: true });
 }
@@ -33,7 +33,7 @@ const storage = multer.diskStorage({
   filename: function(req, file, cb) {
     // Create unique filename with original extension
     const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
-    const ext = path.extname(file.originalname);
+    const ext = join(file.originalname);
     cb(null, 'image-' + uniqueSuffix + ext);
   }
 });
@@ -71,15 +71,17 @@ const handleMulterErrors = (err, req, res, next) => {
 
 // Middleware
 app.use(cors({
-  origin: process.env.NODE_ENV === 'production' 
-    ? ['https://your-frontend-url.vercel.app', 'https://skyscribbler.com'] 
-    : 'http://localhost:5173',
+  origin: process.env.CORS_ORIGIN || '*',
+  methods: ['GET', 'POST', 'PUT', 'DELETE'],
   credentials: true
 }));
 app.use(express.json());
 
 // Serve static files from uploads directory
-app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
+app.use('/uploads', express.static(join(__dirname, 'uploads')));
+
+// Serve static files from the React app
+app.use(express.static(join(__dirname, 'dist')));
 
 // Add health endpoint for API discovery
 app.get('/api/health', (req, res) => {
@@ -532,6 +534,11 @@ app.delete('/api/reviews/:id', async (req, res) => {
     console.error('Error deleting review:', error);
     res.status(500).json({ error: 'Server error', message: error.message });
   }
+});
+
+// The "catchall" handler: for any request that doesn't match one above, send back React's index.html file.
+app.get('*', (req, res) => {
+  res.sendFile(join(__dirname, 'dist', 'index.html'));
 });
 
 // Error handler
