@@ -1,9 +1,9 @@
 import axios from 'axios';
 
-// Use environment variable for API URL
-console.log('Environment variables:', import.meta.env);
-const API_URL = import.meta.env.VITE_API_URL || 'https://skyscribble-app.onrender.com/api';
-console.log('Using API URL:', API_URL);
+// Use environment variable for API URL or default to localhost
+console.log('Environment variables available:', Object.keys(import.meta.env));
+const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000/api';
+console.log(`Using API URL: ${API_URL} (from env: ${!!import.meta.env.VITE_API_URL})`);
 
 // Create an axios instance with the API_URL as the base URL
 const api = axios.create({
@@ -15,31 +15,36 @@ const api = axios.create({
   withCredentials: true // Enable cookies for cross-origin requests
 });
 
-// Log all requests in development
+// In development, show detailed request information
 api.interceptors.request.use(
   (config) => {
-    console.log('API Request:', config.method.toUpperCase(), config.url);
+    const fullUrl = `${config.baseURL}${config.url}`.replace(/\/+/g, '/').replace(':/', '://');
+    console.log(`🔄 API Request: ${config.method.toUpperCase()} ${fullUrl}`);
     return config;
   },
   (error) => {
+    console.error('❌ Request Error:', error.message);
     return Promise.reject(error);
   }
 );
 
 // Add response interceptor for better error handling
 api.interceptors.response.use(
-  (response) => {
-    console.log('API Response:', response.status, response.config.url);
+  response => {
+    // Simply return the successful response
     return response;
   },
-  (error) => {
-    console.error('API Error:', error.message);
+  error => {
+    // Simple error logging
     if (error.response) {
-      console.error('Response data:', error.response.data);
-      console.error('Response status:', error.response.status);
+      console.error(`API Error (${error.response.status}):`, error.response.data);
     } else if (error.request) {
-      console.error('No response received:', error.request);
+      console.error('Network Error: No response received');
+    } else {
+      console.error('API Error:', error.message);
     }
+    
+    // Pass the error through
     return Promise.reject(error);
   }
 );
@@ -75,38 +80,28 @@ export const getReviewDetails = async (reviewId) => {
 };
 
 export const createAirline = async (airlineData) => {
-  console.log('API: Creating airline with data:', airlineData);
+  // Basic validation
+  if (!airlineData || !airlineData.name) {
+    throw new Error('Airline name is required');
+  }
+  
+  // Simple, direct API call
   try {
-    // Add retry logic for creating airlines
-    let retries = 3;
-    let lastError = null;
+    const response = await api.post('/airlines', {
+      name: airlineData.name.trim()
+    });
     
-    while (retries > 0) {
-      try {
-        const response = await api.post('/airlines', airlineData);
-        console.log('API: Airline successfully created:', response.data);
-        return response.data;
-      } catch (error) {
-        lastError = error;
-        
-        // Only retry on network errors or 500 server errors
-        if (!error.response || error.response.status === 500) {
-          console.log(`API: Retrying... (${retries} attempts left)`);
-          retries--;
-          await new Promise(resolve => setTimeout(resolve, 1000)); // Wait 1 second before retrying
-        } else {
-          // For other errors like 400 or 409, don't retry
-          throw error;
-        }
-      }
-    }
+    // Ensure we have all required properties
+    const airline = {
+      ...response.data,
+      average_rating: response.data.average_rating || 0,
+      review_count: response.data.review_count || 0
+    };
     
-    // If we've exhausted retries, throw the last error
-    throw lastError;
+    return airline;
   } catch (error) {
-    console.error('API: Error creating airline:', 
-      error.response ? error.response.data : error.message
-    );
+    // Simple error handling
+    console.error('Error creating airline:', error.message);
     throw error;
   }
 };
