@@ -1,6 +1,5 @@
 import { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
-import { motion } from 'framer-motion';
 import { getAirlines } from '../services/api';
 import { getCurrentUser } from '../services/auth';
 import AirlineForm from '../components/AirlineForm';
@@ -11,16 +10,11 @@ const Airlines = () => {
   const [error, setError] = useState(null);
   const [user, setUser] = useState(null);
   const [showForm, setShowForm] = useState(false);
-  
-  console.log('Airlines component mounting, env:', import.meta.env);
 
   useEffect(() => {
-    console.log('Airlines useEffect running');
     const checkUser = async () => {
       try {
-        console.log('Checking current user...');
         const currentUser = await getCurrentUser();
-        console.log('Current user:', currentUser);
         setUser(currentUser);
       } catch (error) {
         console.error('Error checking user:', error);
@@ -33,21 +27,12 @@ const Airlines = () => {
 
   const fetchAirlines = async (retryCount = 0) => {
     try {
-      console.log('Fetching airlines, attempt:', retryCount + 1);
       setLoading(true);
       setError(null);
       const data = await getAirlines();
-      console.log('Airlines data received:', data);
       setAirlines(data);
     } catch (error) {
       console.error('Error fetching airlines:', error);
-      console.error('Error details:', {
-        message: error.message,
-        response: error.response ? {
-          status: error.response.status,
-          data: error.response.data
-        } : 'No response'
-      });
       
       // Only show the error if we've retried a few times
       if (retryCount >= 2) {
@@ -55,7 +40,6 @@ const Airlines = () => {
       } else {
         // Retry with exponential backoff
         const retryDelay = Math.pow(2, retryCount) * 1000; // 1s, 2s, 4s, etc.
-        console.log(`Retrying in ${retryDelay}ms...`);
         setTimeout(() => {
           fetchAirlines(retryCount + 1);
         }, retryDelay);
@@ -66,11 +50,17 @@ const Airlines = () => {
   };
 
   const retryFetchAirlines = () => {
-    fetchAirlines();
+    fetchAirlines(0);
   };
 
   const toggleForm = () => {
-    setShowForm(!showForm);
+    console.log('toggleForm called, current state:', { showForm });
+    // Use this approach to avoid any race conditions
+    setShowForm(prevState => {
+      const newState = !prevState;
+      console.log('Setting showForm to:', newState);
+      return newState;
+    });
   };
 
   if (loading) {
@@ -88,7 +78,7 @@ const Airlines = () => {
       <div className="container mx-auto px-4 py-20">
         <div className="flex flex-col items-center justify-center h-64">
           <p className="text-red-500 mb-4">{error}</p>
-          <button
+          <button 
             onClick={retryFetchAirlines}
             className="bg-blue-500 text-white py-2 px-4 rounded hover:bg-blue-600"
           >
@@ -106,11 +96,10 @@ const Airlines = () => {
 
   const renderStars = (rating) => {
     const stars = [];
-    const fullStars = Math.floor(rating);
+    const roundedRating = Math.round(rating * 2) / 2; // Round to nearest 0.5
     
-    // Create 5 stars
     for (let i = 1; i <= 5; i++) {
-      if (i <= fullStars) {
+      if (i <= roundedRating) {
         // Filled star (golden) for ratings
         stars.push(
           <span 
@@ -157,9 +146,7 @@ const Airlines = () => {
         
         {user && (
           <div style={{ display: 'flex', justifyContent: 'center', width: '100%' }}>
-            {showForm ? (
-              <AirlineForm onSuccess={handleAirlineSuccess} onCancel={toggleForm} />
-            ) : (
+            {!showForm ? (
               <button
                 onClick={toggleForm}
                 style={{
@@ -174,6 +161,21 @@ const Airlines = () => {
               >
                 Add New Airline
               </button>
+            ) : (
+              <div style={{ width: '100%', maxWidth: '500px' }}>
+                <AirlineForm 
+                  onSuccess={(newAirline) => {
+                    // Ensure we have review count and average rating
+                    const airlineWithDefaults = {
+                      ...newAirline,
+                      average_rating: newAirline.average_rating || 0,
+                      review_count: newAirline.review_count || 0
+                    };
+                    handleAirlineSuccess(airlineWithDefaults);
+                  }} 
+                  onCancel={() => setShowForm(false)} 
+                />
+              </div>
             )}
           </div>
         )}

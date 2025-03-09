@@ -4,7 +4,7 @@ import dotenv from 'dotenv';
 import pool from './src/config/db.js';
 import http from 'http';
 import { fileURLToPath } from 'url';
-import { dirname, join } from 'path';
+import path from 'path';
 import fs from 'fs';
 import multer from 'multer';
 import pkg from 'pg';
@@ -12,7 +12,7 @@ const { Pool } = pkg;
 
 // Get __dirname equivalent in ESM
 const __filename = fileURLToPath(import.meta.url);
-const __dirname = dirname(__filename);
+const __dirname = path.dirname(__filename);
 
 dotenv.config();
 
@@ -20,7 +20,7 @@ const app = express();
 const PORT = process.env.PORT || 5000;
 
 // Ensure uploads directory exists
-const uploadsDir = join(__dirname, 'uploads');
+const uploadsDir = path.join(__dirname, 'uploads');
 if (!fs.existsSync(uploadsDir)) {
   fs.mkdirSync(uploadsDir, { recursive: true });
 }
@@ -33,7 +33,7 @@ const storage = multer.diskStorage({
   filename: function(req, file, cb) {
     // Create unique filename with original extension
     const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
-    const ext = join(file.originalname);
+    const ext = path.extname(file.originalname);
     cb(null, 'image-' + uniqueSuffix + ext);
   }
 });
@@ -71,17 +71,14 @@ const handleMulterErrors = (err, req, res, next) => {
 
 // Middleware
 app.use(cors({
-  origin: ['https://sky-scribble-app.vercel.app', process.env.CORS_ORIGIN || '*'],
-  methods: ['GET', 'POST', 'PUT', 'DELETE'],
-  credentials: true
+  origin: 'http://localhost:5173',
+  credentials: true,
+  methods: ['GET', 'POST', 'PUT', 'DELETE']
 }));
 app.use(express.json());
 
 // Serve static files from uploads directory
-app.use('/uploads', express.static(join(__dirname, 'uploads')));
-
-// Serve static files from the React app
-app.use(express.static(join(__dirname, 'dist')));
+app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
 
 // Add health endpoint for API discovery
 app.get('/api/health', (req, res) => {
@@ -117,21 +114,48 @@ app.get('/api/airlines', async (req, res) => {
 app.post('/api/airlines', async (req, res) => {
   try {
     console.log('Server: Received airline data:', req.body);
-    const { name } = req.body;
     
+    // Extract name, ensure it's a string
+    const name = req.body && req.body.name ? String(req.body.name).trim() : '';
+    
+    // Validate input
     if (!name) {
-      console.error('Server: Missing required field: name');
-      return res.status(400).json({ error: 'Missing required field: name is required' });
+      console.error('Server: Missing or invalid airline name');
+      return res.status(400).json({ error: 'Valid airline name is required' });
+    }
+    
+    // Check for duplicate airline name first
+    const existingCheck = await pool.query(
+      'SELECT id FROM airlines WHERE LOWER(name) = LOWER($1)',
+      [name]
+    );
+    
+    if (existingCheck.rowCount > 0) {
+      console.log('Server: Airline with this name already exists');
+      return res.status(409).json({ 
+        error: 'An airline with this name already exists', 
+        code: '23505' 
+      });
     }
     
     // Create new airline
     const result = await pool.query(
-      'INSERT INTO airlines (name) VALUES ($1) RETURNING *',
+      'INSERT INTO airlines (name) VALUES ($1) RETURNING id, name, created_at',
       [name]
     );
     
-    console.log('Server: New airline created:', result.rows[0]);
-    res.status(201).json(result.rows[0]);
+    // Create the response object with added properties
+    const newAirline = {
+      ...result.rows[0],
+      average_rating: 0,
+      review_count: 0,
+      code: '', // Add an empty code property if your frontend expects it
+    };
+    
+    console.log('Server: New airline created:', newAirline);
+    
+    // Send a successful response
+    res.status(201).json(newAirline);
   } catch (error) {
     console.error('Server: Error creating airline:', error);
     
@@ -142,7 +166,7 @@ app.post('/api/airlines', async (req, res) => {
     
     // Provide more specific error feedback
     if (error.code === '28P01') { // Invalid password authentication
-      return res.status(500).json({ error: 'Database authentication failed', message: 'Contact administrator' });
+      return res.status(500).json({ error: 'Database authentication failed' });
     }
     
     res.status(500).json({ error: 'Server error', message: error.message });
@@ -534,17 +558,6 @@ app.delete('/api/reviews/:id', async (req, res) => {
     console.error('Error deleting review:', error);
     res.status(500).json({ error: 'Server error', message: error.message });
   }
-});
-
-// The "catchall" handler: for any request that doesn't match one above, send back React's index.html file.
-app.get('*', (req, res) => {
-  res.sendFile(join(__dirname, 'dist', 'index.html'));
-});
-
-// Error handler
-app.use((err, req, res, next) => {
-  console.error('Unhandled error:', err);
-  res.status(500).json({ error: 'Server error', message: err.message });
 });
 
 // Start the server

@@ -1,123 +1,104 @@
 import { useState } from 'react';
-import { motion } from 'framer-motion';
 import { createAirline } from '../services/api';
 
+// Simplified form with no animations to prevent blinking
 const AirlineForm = ({ onSuccess, onCancel }) => {
-  const [airlineName, setAirlineName] = useState('');
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState(null);
-  const [retryCount, setRetryCount] = useState(0);
+  const [name, setName] = useState('');
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [errorMsg, setErrorMsg] = useState('');
   
-  const handleSubmit = async (e) => {
-    e.preventDefault();
+  const handleSubmit = async (event) => {
+    event.preventDefault();
     
-    if (!airlineName.trim()) {
-      setError('Airline name cannot be empty');
+    // Validate name
+    if (!name.trim()) {
+      setErrorMsg('Airline name is required');
+      return;
+    }
+    
+    // Prevent multiple submissions
+    if (isSubmitting) {
       return;
     }
     
     try {
-      setLoading(true);
-      setError(null);
+      setErrorMsg('');
+      setIsSubmitting(true);
       
-      console.log("Creating new airline:", { name: airlineName });
-      const newAirline = await createAirline({ name: airlineName });
+      // Call API
+      const newAirline = await createAirline({ name: name.trim() });
       
-      console.log("New airline created:", newAirline);
-      setLoading(false);
-      setAirlineName(''); // Clear form after successful submission
+      // Handle success
+      setName(''); // Reset form
       
-      if (onSuccess) {
+      // Notify parent of success
+      if (onSuccess && typeof onSuccess === 'function') {
         onSuccess(newAirline);
       }
-    } catch (err) {
-      console.error("Error creating airline:", err);
-      setLoading(false);
+    } catch (error) {
+      console.error('Failed to create airline:', error);
       
-      // Handle various error scenarios
-      if (err.response) {
-        // The server responded with an error status code
-        if (err.response.status === 409 || (err.response.data && err.response.data.code === '23505')) {
-          setError('An airline with this name already exists');
-        } else if (err.response.data && err.response.data.error) {
-          // Use the error message from the server if available
-          setError(`Failed to create airline: ${err.response.data.error}`);
-        } else {
-          setError('Failed to create airline. Please try again.');
-        }
-      } else if (err.request) {
-        // The request was made but no response was received (network error)
-        setError('Network error. Please check your connection and try again.');
-        
-        // Increment retry count for network errors
-        setRetryCount(prev => prev + 1);
-        if (retryCount < 2) {
-          // Auto-retry for network errors
-          setTimeout(() => {
-            setError('Retrying connection...');
-            handleSubmit(e);
-          }, 2000);
-        }
+      // Handle specific error cases
+      if (error.response && error.response.status === 409) {
+        setErrorMsg('An airline with this name already exists');
       } else {
-        // Something else happened while setting up the request
-        setError('Failed to create airline. Please try again.');
+        setErrorMsg('Could not create airline. Please try again.');
       }
+    } finally {
+      setIsSubmitting(false);
     }
   };
   
+  // Simple form with no fancy animations
   return (
-    <motion.div
-      initial={{ opacity: 0, y: 20 }}
-      animate={{ opacity: 1, y: 0 }}
-      className="bg-white rounded-lg shadow-md p-6 mb-6"
-    >
-      <h2 className="text-2xl font-semibold text-gray-800 mb-6">Add New Airline</h2>
+    <div className="bg-white p-4 rounded shadow-md mb-4 border border-gray-200">
+      <h3 className="text-xl font-bold mb-3">Add New Airline</h3>
       
-      {error && (
-        <div className="bg-red-100 text-red-700 p-3 rounded-md mb-4">
-          {error}
+      {errorMsg && (
+        <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-2 rounded mb-3">
+          {errorMsg}
         </div>
       )}
       
       <form onSubmit={handleSubmit}>
-        <div className="mb-4">
-          <label htmlFor="airlineName" className="block text-sm font-medium text-gray-700 mb-1">
-            Airline Name
+        <div className="mb-3">
+          <label className="block text-gray-700 font-medium mb-2">
+            Airline Name:
           </label>
           <input
-            type="text"
-            id="airlineName"
-            value={airlineName}
+            type="text" 
+            value={name}
             onChange={(e) => {
-              setAirlineName(e.target.value);
-              if (error) setError(null); // Clear error when user types
+              setName(e.target.value);
+              if (errorMsg) setErrorMsg('');
             }}
-            required
-            className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+            className="w-full px-3 py-2 border border-gray-300 rounded"
             placeholder="Enter airline name"
+            disabled={isSubmitting}
           />
         </div>
         
-        <div className="flex justify-end space-x-3">
+        <div className="flex justify-end gap-2">
           <button
             type="button"
             onClick={onCancel}
-            className="px-4 py-2 border border-gray-300 rounded-md text-gray-700 hover:bg-gray-50 transition-colors"
+            className="px-4 py-2 bg-gray-200 text-gray-800 rounded"
+            disabled={isSubmitting}
           >
             Cancel
           </button>
           <button
             type="submit"
-            disabled={loading}
-            className={`px-4 py-2 rounded-md text-white font-medium ${
-              loading ? 'bg-blue-400 cursor-not-allowed' : 'bg-blue-600 hover:bg-blue-700'
-            } transition-colors`}
+            className={`px-4 py-2 bg-blue-600 text-white rounded ${
+              isSubmitting ? 'opacity-70 cursor-not-allowed' : 'hover:bg-blue-700'
+            }`}
+            disabled={isSubmitting}
           >
-            {loading ? 'Creating...' : 'Create Airline'}
+            {isSubmitting ? 'Creating...' : 'Create Airline'}
           </button>
         </div>
       </form>
-    </motion.div>
+    </div>
   );
 };
 
