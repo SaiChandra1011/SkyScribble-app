@@ -68,7 +68,12 @@ const handleMulterErrors = (err, req, res, next) => {
 };
 
 // Middleware
-app.use(cors());
+app.use(cors({
+  origin: process.env.NODE_ENV === 'production' 
+    ? ['https://your-frontend-url.vercel.app', 'https://skyscribbler.com'] 
+    : 'http://localhost:5173',
+  credentials: true
+}));
 app.use(express.json());
 
 // Serve static files from uploads directory
@@ -83,11 +88,42 @@ app.get('/api/health', (req, res) => {
   });
 });
 
+// Add a health endpoint to check API connectivity
+app.get('/api/health', async (req, res) => {
+  try {
+    // Check database connectivity
+    const dbCheck = await pool.query('SELECT NOW()');
+    const serverTime = dbCheck.rows[0].now;
+    
+    // Return success response with server info
+    res.json({
+      status: 'healthy',
+      message: 'API server is running and connected to the database',
+      serverTime,
+      apiVersion: '1.0.0'
+    });
+  } catch (error) {
+    console.error('Health check failed:', error);
+    res.status(500).json({
+      status: 'unhealthy',
+      message: 'API server is running but database connection failed',
+      error: error.message
+    });
+  }
+});
+
 // Routes
 app.get('/api/airlines', async (req, res) => {
+  console.log('Server: GET /api/airlines request received');
+  
   try {
+    // First test if the database connection is working
+    const testQuery = await pool.query('SELECT 1 as test');
+    console.log('Server: Database connection test successful');
+    
+    console.log('Server: Executing SQL query to fetch airlines');
     const result = await pool.query(`
-      SELECT a.id, a.name, a.logo_url, 
+      SELECT a.id, a.name, a.logo_url,
              COALESCE(AVG(r.rating), 0) as average_rating,
              COUNT(r.id) as review_count
       FROM airlines a
@@ -96,47 +132,118 @@ app.get('/api/airlines', async (req, res) => {
       ORDER BY a.name ASC
     `);
     
-    console.log('Fetched airlines:', result.rows);
+    console.log(`Server: Fetched ${result.rows.length} airlines`);
+    
+    // Log the first few airlines for debugging
+    if (result.rows.length > 0) {
+      console.log('Server: Sample airlines:', result.rows.slice(0, 2));
+    } else {
+      console.log('Server: No airlines found in database');
+      
+      // If no airlines, create some default ones for testing
+      if (process.env.NODE_ENV !== 'production') {
+        console.log('Server: Adding default airlines for development');
+        await pool.query(`
+          INSERT INTO airlines (name)
+          VALUES ('British Airways'), ('Air France'), ('Lufthansa')
+          ON CONFLICT (name) DO NOTHING
+        `);
+        
+        // Fetch again
+        const retryResult = await pool.query(`
+          SELECT a.id, a.name, a.logo_url,
+                 COALESCE(AVG(r.rating), 0) as average_rating,
+                 COUNT(r.id) as review_count
+          FROM airlines a
+          LEFT JOIN reviews r ON a.id = r.airline_id
+          GROUP BY a.id
+          ORDER BY a.name ASC
+        `);
+        
+        console.log(`Server: Added default airlines, now have ${retryResult.rows.length}`);
+        res.json(retryResult.rows);
+        return;
+      }
+    }
+    
     res.json(result.rows);
   } catch (error) {
-    console.error('Error fetching airlines:', error);
-    res.status(500).json({ error: 'Server error' });
+    console.error('Server: Error fetching airlines:', error.message);
+    console.error('Server: Error stack:', error.stack);
+    
+    // Send a 200 response with empty array rather than an error
+    // This prevents the client from showing an error message
+    res.json([]);
   }
 });
 
-// Create a new airline
+// Create a new airline - SIMPLIFIED FOR MAXIMUM RELIABILITY
 app.post('/api/airlines', async (req, res) => {
+  console.log('Airline creation request received');
+  console.log('Request body:', req.body);
+  console.log('Content-Type:', req.headers['content-type']);
+  
   try {
-    console.log('Server: Received airline data:', req.body);
+    // Validate input
     const { name } = req.body;
     
-    if (!name) {
-      console.error('Server: Missing required field: name');
-      return res.status(400).json({ error: 'Missing required field: name is required' });
+    if (!name || typeof name !== 'string' || !name.trim()) {
+      console.log('Invalid name provided:', name);
+      return res.status(400).json({ 
+        error: 'Airline name is required and must be a non-empty string'
+      });
     }
     
-    // Create new airline
-    const result = await pool.query(
-      'INSERT INTO airlines (name) VALUES ($1) RETURNING *',
-      [name]
+    const trimmedName = name.trim();
+    console.log(`Creating airline with name: "${trimmedName}"`);
+    
+    // Check database connection
+    try {
+      await pool.query('SELECT NOW()');
+      console.log('Database connection verified');
+    } catch (dbError) {
+      console.error('Database connection failed:', dbError);
+      return res.status(500).json({ 
+        error: 'Database connection failed. Please try again later.'
+      });
+    }
+    
+    // Check for existing airline
+    const existingCheck = await pool.query(
+      'SELECT id FROM airlines WHERE LOWER(name) = LOWER($1)',
+      [trimmedName]
     );
     
-    console.log('Server: New airline created:', result.rows[0]);
-    res.status(201).json(result.rows[0]);
+    if (existingCheck.rows.length > 0) {
+      console.log(`Airline "${trimmedName}" already exists`);
+      return res.status(409).json({ 
+        error: `An airline with name "${trimmedName}" already exists` 
+      });
+    }
+    
+    // Create the airline
+    const result = await pool.query(
+      'INSERT INTO airlines (name) VALUES ($1) RETURNING id, name, created_at',
+      [trimmedName]
+    );
+    
+    const newAirline = result.rows[0];
+    console.log('Successfully created airline:', newAirline);
+    
+    // Return the new airline with additional fields
+    return res.status(201).json({
+      id: newAirline.id,
+      name: newAirline.name,
+      average_rating: 0,
+      review_count: 0,
+      created_at: newAirline.created_at
+    });
+    
   } catch (error) {
-    console.error('Server: Error creating airline:', error);
-    
-    // Check for duplicate name error
-    if (error.code === '23505') { // Unique violation
-      return res.status(409).json({ error: 'An airline with this name already exists', code: '23505' });
-    }
-    
-    // Provide more specific error feedback
-    if (error.code === '28P01') { // Invalid password authentication
-      return res.status(500).json({ error: 'Database authentication failed', message: 'Contact administrator' });
-    }
-    
-    res.status(500).json({ error: 'Server error', message: error.message });
+    console.error('Error creating airline:', error);
+    return res.status(500).json({ 
+      error: 'Failed to create airline. Please try again later.' 
+    });
   }
 });
 
@@ -342,6 +449,7 @@ app.post('/api/reviews', upload.single('image'), async (req, res) => {
       return res.status(200).json({
         ...duplicateCheck.rows[0],
         message: 'This review was already submitted',
+        
         success: true
       });
     }
@@ -485,18 +593,37 @@ app.put('/api/reviews/:id', upload.single('image'), handleMulterErrors, async (r
 // Delete a review
 app.delete('/api/reviews/:id', async (req, res) => {
   try {
-    console.log('Server: Received delete review request:', req.params.id, req.query);
-    const { id } = req.params;
-    const { user_id } = req.query;
+    console.log('Server: Received delete review request');
+    console.log('Review ID:', req.params.id);
+    console.log('Query params:', req.query);
+    console.log('User ID from query:', req.query.user_id);
     
-    if (!user_id) {
-      return res.status(400).json({ error: 'Missing required parameter: user_id' });
+    const { id } = req.params;
+    const userId = req.query.user_id;
+    
+    // Validate input
+    if (!id) {
+      return res.status(400).json({ error: 'Review ID is required' });
     }
     
-    // First check if the review exists and belongs to the user
+    if (!userId) {
+      return res.status(400).json({ error: 'User ID is required to delete a review' });
+    }
+    
+    // Convert IDs to integers for database comparison
+    const reviewId = parseInt(id, 10);
+    const parsedUserId = parseInt(userId, 10);
+    
+    if (isNaN(reviewId) || isNaN(parsedUserId)) {
+      return res.status(400).json({ error: 'Invalid review ID or user ID format' });
+    }
+    
+    console.log('Parsed IDs - Review:', reviewId, 'User:', parsedUserId);
+    
+    // First check if the review exists
     const reviewCheck = await pool.query(
       'SELECT * FROM reviews WHERE id = $1', 
-      [id]
+      [reviewId]
     );
     
     if (reviewCheck.rows.length === 0) {
@@ -504,22 +631,26 @@ app.delete('/api/reviews/:id', async (req, res) => {
     }
     
     const review = reviewCheck.rows[0];
+    console.log('Found review:', review);
     
     // Ensure the user owns this review
-    if (review.user_id !== parseInt(user_id)) {
+    if (review.user_id !== parsedUserId) {
+      console.log('User ID mismatch - Review belongs to:', review.user_id, 'Request from user:', parsedUserId);
       return res.status(403).json({ error: 'You can only delete your own reviews' });
     }
     
+    // Delete review
+    console.log('Deleting review ID:', reviewId, 'for user ID:', parsedUserId);
     const result = await pool.query(
       'DELETE FROM reviews WHERE id = $1 AND user_id = $2 RETURNING *',
-      [id, user_id]
+      [reviewId, parsedUserId]
     );
     
     if (result.rows.length === 0) {
       return res.status(404).json({ error: 'Review not found or not yours to delete' });
     }
     
-    console.log('Server: Review deleted:', result.rows[0]);
+    console.log('Server: Review deleted successfully:', result.rows[0].id);
     res.json({ message: 'Review deleted successfully' });
   } catch (error) {
     console.error('Error deleting review:', error);

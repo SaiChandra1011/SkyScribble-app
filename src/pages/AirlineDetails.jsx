@@ -176,11 +176,40 @@ const AirlineDetails = () => {
     }
 
     try {
-      await deleteReview(reviewId, user?.id);
-      fetchAirlineDetails();
+      setLoading(true);
+      
+      // Check if user is logged in
+      if (!user || !user.id) {
+        alert('You must be logged in to delete a review.');
+        return;
+      }
+      
+      console.log('Attempting to delete review:', reviewId, 'by user:', user.id);
+      
+      await deleteReview(reviewId, user.id);
+      
+      // Show success message
+      alert('Review deleted successfully!');
+      
+      // Refresh airline details to show updated list
+      await fetchAirlineDetails();
     } catch (error) {
       console.error('Error deleting review:', error);
-      alert('Failed to delete review. Please try again.');
+      
+      // Provide a more detailed error message
+      let errorMessage = 'Failed to delete review. ';
+      
+      if (error.response && error.response.data && error.response.data.error) {
+        errorMessage += error.response.data.error;
+      } else if (error.message) {
+        errorMessage += error.message;
+      } else {
+        errorMessage += 'Please try again.';
+      }
+      
+      alert(errorMessage);
+    } finally {
+      setLoading(false);
     }
   };
 
