@@ -12,7 +12,10 @@ import multer from 'multer';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-dotenv.config();
+// Load environment variables
+dotenv.config({
+  path: process.env.NODE_ENV === 'production' ? '.env.production' : '.env'
+});
 
 const app = express();
 const PORT = process.env.PORT || 5000;
@@ -67,11 +70,16 @@ const handleMulterErrors = (err, req, res, next) => {
   next(err);
 };
 
+// Determine allowed origins based on environment
+const corsOrigins = process.env.NODE_ENV === 'production' 
+  ? process.env.CORS_ORIGIN ? process.env.CORS_ORIGIN.split(',') : ['https://skyscribble.netlify.app']
+  : 'http://localhost:5173';
+
+console.log('CORS origins configured:', corsOrigins);
+
 // Middleware
 app.use(cors({
-  origin: process.env.NODE_ENV === 'production' 
-    ? ['https://your-frontend-url.vercel.app', 'https://skyscribbler.com'] 
-    : 'http://localhost:5173',
+  origin: corsOrigins,
   credentials: true
 }));
 app.use(express.json());
@@ -100,6 +108,7 @@ app.get('/api/health', async (req, res) => {
       status: 'healthy',
       message: 'API server is running and connected to the database',
       serverTime,
+      env: process.env.NODE_ENV || 'development',
       apiVersion: '1.0.0'
     });
   } catch (error) {
@@ -664,29 +673,28 @@ app.use((err, req, res, next) => {
   res.status(500).json({ error: 'Server error', message: err.message });
 });
 
-// Start the server
-const startServer = (port) => {
+// IMPORTANT: Server startup with port conflict handling
+const startServer = () => {
   const server = http.createServer(app);
   
-  server.on('error', (error) => {
-    if (error.code === 'EADDRINUSE') {
-      console.error(`Port ${port} is already in use. Please close the application using this port and try again.`);
-      process.exit(1);
+  // Attempt to listen on the specified port
+  server.listen(PORT, () => {
+    console.log(`Server is running on port ${PORT} in ${process.env.NODE_ENV || 'development'} mode`);
+    console.log(`Database connected to ${process.env.PGHOST || 'localhost'}`);
+  }).on('error', (err) => {
+    if (err.code === 'EADDRINUSE') {
+      // If the port is already in use, try the next one
+      console.log(`Port ${PORT} is already in use, trying ${parseInt(PORT) + 1}...`);
+      PORT = parseInt(PORT) + 1;
+      startServer(); // Try again with new port
     } else {
-      console.error('Server error:', error);
+      console.error('Server error:', err);
     }
   });
-  
-  server.listen(port, () => {
-    console.log(`Server running on port ${port}`);
-    console.log(`API URL: http://localhost:${port}/api`);
-  });
-  
-  return server;
 };
 
-// Start the server with the defined PORT
-startServer(PORT);
+// Start the server
+startServer();
 
 // Export for testing
 export default app; 
