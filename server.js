@@ -17,8 +17,17 @@ dotenv.config({
   path: process.env.NODE_ENV === 'production' ? '.env.production' : '.env'
 });
 
+// Initialize Express and initial setup
 const app = express();
-const PORT = process.env.PORT || 5000;
+let PORT = process.env.PORT || 5000;
+
+// Display key environment info at startup
+console.log('=== Application Environment ===');
+console.log('NODE_ENV:', process.env.NODE_ENV || 'development');
+console.log('Database Host:', process.env.PGHOST || 'localhost');
+console.log('Using SSL:', process.env.PGSSLMODE || 'undefined');
+console.log('Port:', PORT);
+console.log('===============================');
 
 // Ensure uploads directory exists
 const uploadsDir = path.join(__dirname, 'uploads');
@@ -71,30 +80,28 @@ const handleMulterErrors = (err, req, res, next) => {
 };
 
 // Determine allowed origins based on environment
-const corsOrigins = process.env.NODE_ENV === 'production' 
-  ? process.env.CORS_ORIGIN ? process.env.CORS_ORIGIN.split(',') : ['https://skyscribble.netlify.app']
-  : 'http://localhost:5173';
+const corsOrigin = process.env.CORS_ORIGIN || (
+  process.env.NODE_ENV === 'production' 
+    ? 'https://sky-scribble-app.vercel.app' 
+    : 'http://localhost:5173'
+);
 
-console.log('CORS origins configured:', corsOrigins);
+// Clean up trailing slashes from CORS origin if present
+const cleanCorsOrigin = corsOrigin.endsWith('/') 
+  ? corsOrigin.slice(0, -1) 
+  : corsOrigin;
+
+console.log('CORS origin configured:', cleanCorsOrigin);
 
 // Middleware
 app.use(cors({
-  origin: corsOrigins,
+  origin: cleanCorsOrigin,
   credentials: true
 }));
 app.use(express.json());
 
 // Serve static files from uploads directory
 app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
-
-// Add health endpoint for API discovery
-app.get('/api/health', (req, res) => {
-  res.json({ 
-    status: 'ok', 
-    message: 'Server is running',
-    timestamp: new Date().toISOString() 
-  });
-});
 
 // Add a health endpoint to check API connectivity
 app.get('/api/health', async (req, res) => {
@@ -109,7 +116,10 @@ app.get('/api/health', async (req, res) => {
       message: 'API server is running and connected to the database',
       serverTime,
       env: process.env.NODE_ENV || 'development',
-      apiVersion: '1.0.0'
+      apiVersion: '1.0.0',
+      cors: {
+        origin: cleanCorsOrigin
+      }
     });
   } catch (error) {
     console.error('Health check failed:', error);
@@ -680,7 +690,7 @@ const startServer = () => {
   // Attempt to listen on the specified port
   server.listen(PORT, () => {
     console.log(`Server is running on port ${PORT} in ${process.env.NODE_ENV || 'development'} mode`);
-    console.log(`Database connected to ${process.env.PGHOST || 'localhost'}`);
+    console.log(`To access the API: http://localhost:${PORT}/api/health`);
   }).on('error', (err) => {
     if (err.code === 'EADDRINUSE') {
       // If the port is already in use, try the next one

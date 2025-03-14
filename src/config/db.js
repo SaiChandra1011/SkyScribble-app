@@ -18,6 +18,9 @@ const { Pool } = pg;
 console.log('DB: Initializing database connection');
 console.log('DB: Environment:', process.env.NODE_ENV || 'development');
 
+// Force PostgreSQL driver to use IPv4 instead of IPv6
+process.env.PGSSLMODE = process.env.PGSSLMODE || 'require';
+
 // Configure connection options
 let poolConfig;
 
@@ -27,7 +30,7 @@ if (process.env.DATABASE_URL) {
   poolConfig = {
     connectionString: process.env.DATABASE_URL,
     ssl: {
-      rejectUnauthorized: false // Required for some hosting providers
+      rejectUnauthorized: false // Required for Supabase and most cloud PostgreSQL providers
     }
   };
 } else {
@@ -45,33 +48,56 @@ if (process.env.DATABASE_URL) {
   };
 }
 
-// Add common settings
-poolConfig.connectionTimeoutMillis = 10000; // 10 seconds
-poolConfig.max = 20; // Max 20 clients in pool
+// Add common settings with better timeouts and connection handling
+poolConfig.connectionTimeoutMillis = 20000; // 20 seconds
+poolConfig.max = 10; // Max 10 clients in pool
+poolConfig.idleTimeoutMillis = 30000; // Close idle clients after 30 seconds
+poolConfig.allowExitOnIdle = true; // Allow cleanup on app exit
 
-console.log('DB: Connecting to', poolConfig.host || 'database via connection string');
+console.log('DB: Connecting to', poolConfig.connectionString ? 'database via connection string' : poolConfig.host);
 
-// Create the connection pool
+// Create the connection pool with enhanced error handling
 const pool = new Pool(poolConfig);
 
-// Test the database connection
-pool.query('SELECT NOW()')
-  .then(res => {
-    console.log('DB: Successfully connected to PostgreSQL');
-    console.log('DB: Server time:', res.rows[0].now);
-  })
-  .catch(err => {
-    console.error('DB: Error connecting to PostgreSQL:', err.message);
-    console.error('DB: Check your database credentials and ensure PostgreSQL is running');
-  });
-
-// Add error handler
-pool.on('error', (err) => {
+// Add robust error listener for pool-level errors
+pool.on('error', (err, client) => {
   console.error('DB: Unexpected error on idle client', err);
-  // Don't exit the process in production, just log the error
   if (process.env.NODE_ENV !== 'production') {
+    console.error('DB: Error details:', err.stack);
+    console.error('DB: This is a non-production environment, exiting process');
     process.exit(-1);
+  } else {
+    console.error('DB: In production environment, trying to keep application running');
+    // In production we log but don't crash the app
   }
 });
+
+// Test the database connection with retry logic
+const testConnection = async (retries = 3, delay = 3000) => {
+  for (let attempt = 1; attempt <= retries; attempt++) {
+    try {
+      console.log(`DB: Connection attempt ${attempt}/${retries}`);
+      const res = await pool.query('SELECT NOW()');
+      console.log('DB: Successfully connected to PostgreSQL');
+      console.log('DB: Server time:', res.rows[0].now);
+      return true;
+    } catch (err) {
+      console.error(`DB: Connection attempt ${attempt} failed:`, err.message);
+      
+      if (attempt < retries) {
+        console.log(`DB: Retrying in ${delay/1000} seconds...`);
+        await new Promise(resolve => setTimeout(resolve, delay));
+      } else {
+        console.error('DB: All connection attempts failed.');
+        console.error('DB: Check your database credentials, network, and ensure PostgreSQL is running');
+        console.error('DB: Detailed error:', err);
+      }
+    }
+  }
+  return false;
+};
+
+// Execute the test connection
+testConnection();
 
 export default pool; 
