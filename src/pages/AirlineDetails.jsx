@@ -176,11 +176,40 @@ const AirlineDetails = () => {
     }
 
     try {
-      await deleteReview(reviewId, user?.id);
-      fetchAirlineDetails();
+      setLoading(true);
+      
+      // Check if user is logged in
+      if (!user || !user.id) {
+        alert('You must be logged in to delete a review.');
+        return;
+      }
+      
+      console.log('Attempting to delete review:', reviewId, 'by user:', user.id);
+      
+      await deleteReview(reviewId, user.id);
+      
+      // Show success message
+      alert('Review deleted successfully!');
+      
+      // Refresh airline details to show updated list
+      await fetchAirlineDetails();
     } catch (error) {
       console.error('Error deleting review:', error);
-      alert('Failed to delete review. Please try again.');
+      
+      // Provide a more detailed error message
+      let errorMessage = 'Failed to delete review. ';
+      
+      if (error.response && error.response.data && error.response.data.error) {
+        errorMessage += error.response.data.error;
+      } else if (error.message) {
+        errorMessage += error.message;
+      } else {
+        errorMessage += 'Please try again.';
+      }
+      
+      alert(errorMessage);
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -276,157 +305,188 @@ const AirlineDetails = () => {
       {airline.reviews.length === 0 ? (
         <p className="text-gray-600 italic">No reviews yet. Be the first to review!</p>
       ) : (
-        <div className="space-y-6">
-          {airline.reviews.map(review => (
+        <div>
+          {airline.reviews.map((review, index) => (
             <div key={review.id}>
-              {editingReviewId === review.id ? (
-                <ReviewEdit
-                  review={review}
-                  userId={user?.id}
-                  onSuccess={() => {
-                    setEditingReviewId(null);
-                    fetchAirlineDetails();
-                  }}
-                  onCancel={handleCancelEdit}
-                />
-              ) : (
-                <motion.div
-                  initial={{ opacity: 0, y: 20 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  transition={{ duration: 0.3 }}
-                  className="cursor-pointer"
-                  onClick={() => toggleReviewExpansion(review.id)}
-                >
-                  <div 
-                    style={{ 
-                      backgroundColor: '#4a89dc', 
-                      borderRadius: '10px', 
-                      padding: '20px',
-                      color: 'white',
-                      boxShadow: '0 4px 12px rgba(74, 137, 220, 0.2)',
-                      transition: 'all 0.3s ease'
+              <div style={{ marginBottom: '3rem' }}>
+                {editingReviewId === review.id ? (
+                  <ReviewEdit
+                    review={review}
+                    userId={user?.id}
+                    onSuccess={() => {
+                      setEditingReviewId(null);
+                      fetchAirlineDetails();
                     }}
+                    onCancel={handleCancelEdit}
+                  />
+                ) : (
+                  <motion.div
+                    initial={{ opacity: 0, y: 20 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ duration: 0.3 }}
+                    className="cursor-pointer"
+                    onClick={() => toggleReviewExpansion(review.id)}
                   >
-                    <h3 style={{ fontSize: '1.25rem', fontWeight: 'bold', marginBottom: '10px' }}>
-                      {review.heading}
-                    </h3>
-                    
-                    <div style={{ display: 'flex', marginBottom: '12px' }}>
-                      {renderStars(review.rating)}
-                    </div>
-                    
-                    <div style={{ display: 'flex', alignItems: 'center', marginBottom: '12px' }}>
-                      <span style={{ marginRight: '8px', fontSize: '1.25rem' }}>📍</span>
-                      <span>{review.departure_city} to {review.arrival_city}</span>
-                    </div>
-                    
-                    <div style={{ display: 'flex', alignItems: 'flex-start', marginBottom: '12px' }}>
-                      <span style={{ marginRight: '8px', fontSize: '1.25rem', marginTop: '2px' }}>💬</span>
-                      <span>{truncateText(review.description, 60)}</span>
-                    </div>
-                    
-                    <div style={{ display: 'flex', alignItems: 'center', marginTop: '15px' }}>
-                      <span style={{ marginRight: '8px', fontSize: '1.25rem' }}>👤</span>
-                      <span>Reviewed by {review.display_name || 'Anonymous'}</span>
-                    </div>
-                    
-                    {user && user.id === review.user_id && (
-                      <div style={{ 
-                        display: 'flex',
-                        justifyContent: 'flex-end',
-                        marginTop: '15px',
-                        paddingTop: '10px',
-                        borderTop: '1px solid rgba(255,255,255,0.2)',
-                      }}>
-                        <button
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            handleEditClick(review.id);
-                          }}
-                          style={{
-                            backgroundColor: 'white',
-                            color: '#4a89dc',
-                            padding: '6px 12px',
-                            borderRadius: '4px',
-                            fontWeight: '500',
-                            marginRight: '10px',
-                            border: 'none',
-                            cursor: 'pointer'
-                          }}
-                        >
-                          Update
-                        </button>
-                        <button
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            handleDeleteClick(review.id);
-                          }}
-                          style={{
-                            backgroundColor: 'rgba(255,255,255,0.15)',
-                            color: 'white',
-                            padding: '6px 12px',
-                            borderRadius: '4px',
-                            fontWeight: '500',
-                            border: 'none',
-                            cursor: 'pointer'
-                          }}
-                        >
-                          Delete
-                        </button>
-                      </div>
-                    )}
-                    
-                    <AnimatePresence>
-                      {expandedReviews[review.id] && (
-                        <motion.div
-                          initial={{ opacity: 0, height: 0 }}
-                          animate={{ opacity: 1, height: 'auto' }}
-                          exit={{ opacity: 0, height: 0 }}
-                          transition={{ duration: 0.3 }}
-                        >
-                          <div style={{ marginTop: '15px' }}>
-                            <div style={{ 
-                              display: 'flex', 
-                              flexDirection: 'column',
-                              marginBottom: '15px',
-                              borderTop: '1px solid rgba(255,255,255,0.2)',
-                              paddingTop: '15px'
-                            }}>
-                              <h4 style={{ fontWeight: 'bold', marginBottom: '8px' }}>Full Description:</h4>
-                              <p>{review.description}</p>
-                            </div>
-                            
-                            {review.image_url && (
-                              <div style={{ marginTop: '15px', textAlign: 'left' }}>
-                                <img 
-                                  src={review.image_url} 
-                                  alt="Review" 
-                                  style={{ 
-                                    maxWidth: '80%', 
-                                    maxHeight: '200px',
-                                    borderRadius: '8px',
-                                    boxShadow: '0 2px 8px rgba(0,0,0,0.15)'
-                                  }} 
-                                />
-                              </div>
-                            )}
-                          </div>
-                        </motion.div>
-                      )}
-                    </AnimatePresence>
-                    
                     <div 
                       style={{ 
-                        display: 'flex', 
-                        justifyContent: 'center', 
-                        marginTop: '10px',
-                        color: 'rgba(255,255,255,0.7)'
+                        backgroundColor: '#4a89dc', 
+                        borderRadius: '10px', 
+                        padding: '20px',
+                        paddingBottom: '25px',
+                        color: 'white',
+                        boxShadow: '0 4px 12px rgba(74, 137, 220, 0.2)',
+                        transition: 'all 0.3s ease'
                       }}
                     >
-                      {expandedReviews[review.id] ? 'Click to collapse' : 'Click to expand'}
+                      <h3 style={{ fontSize: '1.25rem', fontWeight: 'bold', marginBottom: '10px' }}>
+                        {review.heading}
+                      </h3>
+                      
+                      <div style={{ display: 'flex', marginBottom: '12px' }}>
+                        {renderStars(review.rating)}
+                      </div>
+                      
+                      <div style={{ display: 'flex', alignItems: 'center', marginBottom: '12px' }}>
+                        <span style={{ marginRight: '8px', fontSize: '1.25rem' }}>📍</span>
+                        <span>{review.departure_city} to {review.arrival_city}</span>
+                      </div>
+                      
+                      <div style={{ display: 'flex', alignItems: 'flex-start', marginBottom: '12px' }}>
+                        <span style={{ marginRight: '8px', fontSize: '1.25rem', marginTop: '2px' }}>💬</span>
+                        <span>{truncateText(review.description, 60)}</span>
+                      </div>
+                      
+                      <div style={{ display: 'flex', alignItems: 'center', marginTop: '15px' }}>
+                        <span style={{ marginRight: '8px', fontSize: '1.25rem' }}>👤</span>
+                        <span>Reviewed by {review.display_name || 'Anonymous'}</span>
+                      </div>
+                      
+                      {user && user.id === review.user_id && (
+                        <div style={{ 
+                          display: 'flex',
+                          justifyContent: 'flex-end',
+                          marginTop: '15px',
+                          paddingTop: '10px',
+                          borderTop: '1px solid rgba(255,255,255,0.2)',
+                        }}>
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleEditClick(review.id);
+                            }}
+                            style={{
+                              backgroundColor: 'white',
+                              color: '#4a89dc',
+                              padding: '6px 12px',
+                              borderRadius: '4px',
+                              fontWeight: '500',
+                              marginRight: '10px',
+                              border: 'none',
+                              cursor: 'pointer'
+                            }}
+                          >
+                            Update
+                          </button>
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleDeleteClick(review.id);
+                            }}
+                            style={{
+                              backgroundColor: 'rgba(255,255,255,0.15)',
+                              color: 'white',
+                              padding: '6px 12px',
+                              borderRadius: '4px',
+                              fontWeight: '500',
+                              border: 'none',
+                              cursor: 'pointer'
+                            }}
+                          >
+                            Delete
+                          </button>
+                        </div>
+                      )}
+                      
+                      <AnimatePresence>
+                        {expandedReviews[review.id] && (
+                          <motion.div
+                            initial={{ opacity: 0, height: 0 }}
+                            animate={{ opacity: 1, height: 'auto' }}
+                            exit={{ opacity: 0, height: 0 }}
+                            transition={{ duration: 0.3 }}
+                          >
+                            <div style={{ marginTop: '15px' }}>
+                              <div style={{ 
+                                display: 'flex', 
+                                flexDirection: 'column',
+                                marginBottom: '15px',
+                                borderTop: '1px solid rgba(255,255,255,0.2)',
+                                paddingTop: '15px'
+                              }}>
+                                <h4 style={{ fontWeight: 'bold', marginBottom: '8px' }}>Full Description:</h4>
+                                <p>{review.description}</p>
+                              </div>
+                              
+                              {review.image_url && (
+                                <div style={{ marginTop: '15px', textAlign: 'left' }}>
+                                  <img 
+                                    src={review.image_url} 
+                                    alt="Review" 
+                                    style={{ 
+                                      maxWidth: '80%', 
+                                      maxHeight: '200px',
+                                      borderRadius: '8px',
+                                      boxShadow: '0 2px 8px rgba(0,0,0,0.15)'
+                                    }} 
+                                  />
+                                </div>
+                              )}
+                            </div>
+                          </motion.div>
+                        )}
+                      </AnimatePresence>
+                      
+                      <div 
+                        style={{ 
+                          display: 'flex', 
+                          justifyContent: 'center', 
+                          marginTop: '10px',
+                          color: 'rgba(255,255,255,0.7)'
+                        }}
+                      >
+                        {expandedReviews[review.id] ? 'Click to collapse' : 'Click to expand'}
+                      </div>
                     </div>
+                  </motion.div>
+                )}
+              </div>
+              
+              {/* Add spacer after every review except the last one */}
+              {index < airline.reviews.length - 1 && (
+                <div style={{ 
+                  height: '5rem', 
+                  marginBottom: '3rem', 
+                  borderBottom: '2px solid #e5e7eb',
+                  position: 'relative',
+                  overflow: 'visible'
+                }}>
+                  <div style={{
+                    position: 'absolute',
+                    left: '50%',
+                    top: '50%',
+                    transform: 'translate(-50%, -50%)',
+                    width: '50px',
+                    height: '50px',
+                    backgroundColor: '#f3f4f6',
+                    borderRadius: '50%',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    border: '2px solid #e5e7eb'
+                  }}>
+                    <span style={{ color: '#9ca3af', fontSize: '24px' }}>✈️</span>
                   </div>
-                </motion.div>
+                </div>
               )}
             </div>
           ))}

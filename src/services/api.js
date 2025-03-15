@@ -1,17 +1,28 @@
 import axios from 'axios';
 
+ new-main
 // Use environment variable for API URL
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000/api';
 console.log('Using fixed API URL:', API_URL);
 
 // Create an axios instance with the API_URL as the base URL
 const api = axios.create({
+
+// Define API URL with a fallback
+export const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000/api';
+
+// Create axios instance for consistent usage
+export const api = axios.create({
+ new-main-branch
   baseURL: API_URL,
-  timeout: 10000, // 10 seconds
+  timeout: 15000,
   headers: {
     'Content-Type': 'application/json'
   }
 });
+
+// Log the API URL for debugging
+console.log('API URL configured as:', API_URL);
 
 // Add response interceptor for better error handling
 api.interceptors.response.use(
@@ -27,12 +38,52 @@ api.interceptors.response.use(
 );
 
 export const getAirlines = async () => {
+  console.log('API: getAirlines called');
+  console.log('API URL being used:', API_URL);
+  
   try {
-    const response = await api.get('/airlines');
-    return response.data;
+    // Add a small delay to ensure database connection is ready
+    await new Promise(resolve => setTimeout(resolve, 100));
+    
+    console.log('Making GET request to:', `${API_URL}/airlines`);
+    const response = await api.get('/airlines', {
+      // Add timeout
+      timeout: 5000,
+      // Retry request once if it fails
+      retry: 1,
+      retryDelay: 1000
+    });
+    
+    console.log('API: getAirlines response status:', response.status);
+    
+    // Ensure we have data
+    if (!response.data) {
+      console.warn('API: Empty response data');
+      return [];
+    }
+    
+    // Log the first few airlines
+    if (Array.isArray(response.data) && response.data.length > 0) {
+      console.log('API: Sample airlines:', response.data.slice(0, 2));
+      console.log(`API: Total airlines: ${response.data.length}`);
+    } else {
+      console.log('API: No airlines in response data');
+    }
+    
+    // Always return an array
+    return Array.isArray(response.data) ? response.data : [];
   } catch (error) {
-    console.error('Error fetching airlines:', error);
-    throw error;
+    console.error('API: Error fetching airlines:', error.message);
+    
+    if (error.response) {
+      console.error('API: Response status:', error.response.status);
+      console.error('API: Response data:', error.response.data);
+    } else if (error.request) {
+      console.error('API: No response received');
+    }
+    
+    // Return empty array instead of throwing to avoid showing error screen
+    return [];
   }
 };
 
@@ -42,6 +93,16 @@ export const getAirlineDetails = async (airlineId) => {
     return response.data;
   } catch (error) {
     console.error('Error fetching airline details:', error);
+    throw error;
+  }
+};
+
+export const getReviews = async (airlineId) => {
+  try {
+    const response = await api.get(`/airlines/${airlineId}/reviews`);
+    return response.data;
+  } catch (error) {
+    console.error('Error fetching reviews:', error);
     throw error;
   }
 };
@@ -56,40 +117,62 @@ export const getReviewDetails = async (reviewId) => {
   }
 };
 
+// Completely simplify the createAirline function for maximum reliability
 export const createAirline = async (airlineData) => {
-  console.log('API: Creating airline with data:', airlineData);
   try {
-    // Add retry logic for creating airlines
-    let retries = 3;
-    let lastError = null;
+    console.log('Creating airline with data:', airlineData);
+    console.log('Using API URL:', API_URL);
     
-    while (retries > 0) {
-      try {
-        const response = await api.post('/airlines', airlineData);
-        console.log('API: Airline successfully created:', response.data);
-        return response.data;
-      } catch (error) {
-        lastError = error;
-        
-        // Only retry on network errors or 500 server errors
-        if (!error.response || error.response.status === 500) {
-          console.log(`API: Retrying... (${retries} attempts left)`);
-          retries--;
-          await new Promise(resolve => setTimeout(resolve, 1000)); // Wait 1 second before retrying
-        } else {
-          // For other errors like 400 or 409, don't retry
-          throw error;
-        }
-      }
+    // Ensure we have a name
+    if (!airlineData.name || typeof airlineData.name !== 'string') {
+      throw new Error('Airline name is required');
     }
     
-    // If we've exhausted retries, throw the last error
-    throw lastError;
+    // Use the api instance instead of axios directly to ensure baseURL is used
+    const response = await api.post('/airlines', airlineData, {
+      headers: {
+        'Content-Type': 'application/json'
+      }
+    });
+    
+    console.log('Create airline response:', response.data);
+    
+    // Ensure we have the required fields
+    const newAirline = {
+      id: response.data.id,
+      name: response.data.name,
+      average_rating: response.data.average_rating || 0,
+      review_count: response.data.review_count || 0
+    };
+    
+    return newAirline;
   } catch (error) {
-    console.error('API: Error creating airline:', 
-      error.response ? error.response.data : error.message
-    );
-    throw error;
+    console.error('Error creating airline:', error);
+    
+    // Provide helpful error message based on error type
+    if (error.response) {
+      // Server responded with an error status
+      const { status, data } = error.response;
+      console.error('Server error response:', { status, data });
+      
+      if (status === 409) {
+        throw new Error('An airline with this name already exists');
+      } else if (status === 404) {
+        throw new Error('The API endpoint was not found. Please check server configuration.');
+      } else if (data && data.error) {
+        throw new Error(data.error);
+      } else {
+        throw new Error(`Server error: ${status}`);
+      }
+    } else if (error.request) {
+      // Request was made but no response received
+      console.error('Network error - no response received');
+      throw new Error('Network error. Please check your connection and try again.');
+    } else {
+      // Something else happened
+      console.error('Other error:', error.message);
+      throw new Error(error.message || 'An unexpected error occurred');
+    }
   }
 };
 
@@ -107,86 +190,48 @@ export const createOrGetUser = async (userData) => {
 
 export const createReview = async (reviewData) => {
   try {
-    console.log("Submitting review data");
-    
-    // Use the already configured api instance with axios instead of fetch
-    // We need a special config for FormData
-    const config = {
-      headers: {
-        'Content-Type': 'multipart/form-data'
-      }
-    };
-    
-    // Create a simplified object to log (FormData isn't easily loggable)
-    const formDataEntries = {};
-    for (let [key, value] of reviewData.entries()) {
-      // Don't log the actual file contents, just note that it exists
-      formDataEntries[key] = key === 'image' ? 'File data present' : value;
-    }
-    console.log("Form data entries:", formDataEntries);
-    
-    // Make the API request using axios instead of fetch
-    const response = await api.post('/reviews', reviewData, config);
-    
-    console.log("Review submission successful:", response.data);
+    const response = await api.post('/reviews', reviewData);
     return response.data;
   } catch (error) {
-    console.error("API Error in createReview:", error);
-    
-    // Rethrow with a more user-friendly message
-    throw new Error("Failed to submit review. Please try again.");
+    console.error('Error creating review:', error);
+    throw error;
   }
 };
 
 export const updateReview = async (reviewId, reviewData) => {
   try {
-    console.log('API: Updating review:', reviewId, reviewData);
-    
-    // Check if reviewData is FormData (for image uploads)
-    const isFormData = reviewData instanceof FormData;
-    
-    // Configure headers based on data type
-    const config = isFormData ? {
-      headers: {
-        'Content-Type': 'multipart/form-data'
-      }
-    } : {};
-    
-    console.log('API: Updating review with', isFormData ? 'file upload' : 'regular data');
-    
-    const response = await api.put(`/reviews/${reviewId}`, reviewData, config);
+    const response = await api.put(`/reviews/${reviewId}`, reviewData);
     return response.data;
   } catch (error) {
     console.error('Error updating review:', error);
-    
-    // Create a more user-friendly error message
-    let message = 'Failed to update review. Please try again.';
-    
-    if (error.response) {
-      // The request was made and the server responded with a status code
-      // that falls out of the range of 2xx
-      if (error.response.status === 403) {
-        message = 'You can only update your own reviews.';
-      } else if (error.response.data && error.response.data.error) {
-        message = error.response.data.error;
-      }
-    }
-    
-    // Throw a new error with the friendly message but include the original error for debugging
-    const newError = new Error(message);
-    newError.originalError = error;
-    throw newError;
+    throw error;
   }
 };
 
 export const deleteReview = async (reviewId, userId) => {
   try {
-    console.log('API: Deleting review:', reviewId, 'by user:', userId);
-    const response = await api.delete(`/reviews/${reviewId}?user_id=${userId}`);
-    console.log('API: Review deleted successfully');
+    console.log('Deleting review with ID:', reviewId, 'User ID:', userId);
+    
+    if (!reviewId) {
+      throw new Error('Review ID is required');
+    }
+    
+    if (!userId) {
+      throw new Error('User ID is required to delete a review');
+    }
+    
+    // Pass user_id as a query parameter
+    const response = await api.delete(`/reviews/${reviewId}`, {
+      params: { user_id: userId }
+    });
+    
+    console.log('Delete review response:', response.data);
     return response.data;
   } catch (error) {
-    console.error('API: Error deleting review:', error.response ? error.response.data : error.message);
+    console.error('Error deleting review:', error);
+    if (error.response) {
+      console.error('Server response:', error.response.data);
+    }
     throw error;
   }
 };

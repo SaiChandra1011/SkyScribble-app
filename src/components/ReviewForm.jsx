@@ -339,12 +339,27 @@ const ReviewForm = ({ airlineId, userId, onSuccess, onCancel }) => {
               <p className="text-xs text-gray-500 mt-2">Maximum file size: 2MB. Images will be resized automatically.</p>
             </div>
           ) : (
-            <div className="mt-3">
-              <img 
-                src={imagePreview} 
-                alt="Preview" 
-                className="h-32 w-auto object-cover rounded-md border border-gray-300" 
-              />
+            <div className="mt-3 flex flex-col items-center">
+              <div style={{ 
+                width: '150px', 
+                height: '100px', 
+                overflow: 'hidden',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                border: '1px solid #e2e8f0',
+                borderRadius: '0.375rem'
+              }}>
+                <img 
+                  src={imagePreview} 
+                  alt="Preview" 
+                  style={{
+                    maxWidth: '100%',
+                    maxHeight: '100%',
+                    objectFit: 'contain'
+                  }}
+                />
+              </div>
               <button
                 type="button"
                 onClick={handleRemoveImage}
