@@ -1,6 +1,31 @@
 # SkyScribble - Airline Review Application
 
-A full-stack application for users to read and write reviews for airlines.
+SkyScribble is a platform where users can browse, create, and manage airline reviews.
+
+## Project Overview
+
+This full-stack application allows users to:
+- Browse airline reviews
+- Create new airlines 
+- Submit detailed reviews with ratings
+- Edit and delete their own reviews
+- Sign in with Google authentication
+
+## Latest Updates
+
+- Updated database connection to use Transaction Pooler for improved IPv4 compatibility
+- Enhanced error handling for database connections
+- Added better environment configuration for Render deployment
+
+<!-- This comment will trigger a new deployment on Vercel -->
+
+## Technologies Used
+
+- **Frontend**: React, Tailwind CSS, Framer Motion
+- **Backend**: Node.js, Express
+- **Database**: PostgreSQL (Supabase)
+- **Authentication**: Firebase Auth
+- **Deployment**: Vercel (frontend), Render (backend)
 
 ## Features
 
@@ -9,14 +34,6 @@ A full-stack application for users to read and write reviews for airlines.
 - Read and write detailed reviews with ratings
 - Upload images for reviews
 - Responsive design for all devices
-
-## Technologies Used
-
-- **Frontend**: React, Tailwind CSS, Framer Motion
-- **Backend**: Node.js, Express
-- **Database**: PostgreSQL (Supabase)
-- **Authentication**: Firebase Authentication
-- **Image Storage**: Local file system (production: Cloudinary)
 
 ## Deployment Guide
 
