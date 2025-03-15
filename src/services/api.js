@@ -1,10 +1,19 @@
 import axios from 'axios';
 
+ new-main
+// Use environment variable for API URL
+const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000/api';
+console.log('Using fixed API URL:', API_URL);
+
+// Create an axios instance with the API_URL as the base URL
+const api = axios.create({
+
 // Define API URL with a fallback
 export const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000/api';
 
 // Create axios instance for consistent usage
 export const api = axios.create({
+ new-main-branch
   baseURL: API_URL,
   timeout: 15000,
   headers: {

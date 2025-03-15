@@ -7,6 +7,7 @@ import { fileURLToPath } from 'url';
 import path from 'path';
 import fs from 'fs';
 import multer from 'multer';
+import { Pool } from 'pg';
 
 // Get __dirname equivalent in ESM
 const __filename = fileURLToPath(import.meta.url);
@@ -95,7 +96,12 @@ console.log('CORS origin configured:', cleanCorsOrigin);
 
 // Middleware
 app.use(cors({
+ new-main
+  origin: process.env.NODE_ENV === 'production' 
+    ? ['https://your-frontend-url.vercel.app', 'https://skyscribbler.com'] 
+    : 'http://localhost:5173',
   origin: cleanCorsOrigin,
+ new-main-branch
   credentials: true
 }));
 app.use(express.json());
