@@ -16,6 +16,7 @@ const AirlineDetails = () => {
   const [showReviewForm, setShowReviewForm] = useState(false);
   const [editingReviewId, setEditingReviewId] = useState(null);
   const [expandedReviews, setExpandedReviews] = useState({});
+  const [successMessage, setSuccessMessage] = useState('');
 
   useEffect(() => {
     const checkUser = async () => {
@@ -134,32 +135,25 @@ const AirlineDetails = () => {
   };
 
   const handleReviewSuccess = () => {
-    console.log("Review submitted successfully, refreshing data...");
-    
-    // Hide the review form
+    // Hide review form
     setShowReviewForm(false);
     
-    // Show loading indicator
-    setLoading(true);
+    // Show a temporary success message
+    setSuccessMessage('Review submitted successfully!');
     
-    // Set a small timeout before refreshing to allow the database to update
+    // Clear success message after 3 seconds
     setTimeout(() => {
-      // Force a full refetch of airline details
-      fetchAirlineDetails()
-        .then(() => {
-          // Scroll back to top after refresh is complete
-          window.scrollTo({ top: 0, behavior: 'smooth' });
-        })
-        .catch(err => {
-          console.error('Error refreshing airline details after review submission:', err);
-          // Even if there's an error, don't show it to the user as the review was submitted
-          // Just reload the page directly
-          window.location.reload();
-        })
-        .finally(() => {
-          setLoading(false);
-        });
-    }, 1000);
+      setSuccessMessage('');
+    }, 3000);
+    
+    // Fetch updated reviews immediately
+    fetchAirlineDetails();
+    
+    // Scroll to top to show the success message
+    window.scrollTo({
+      top: 0,
+      behavior: 'smooth'
+    });
   };
 
   const handleEditClick = (reviewId) => {
@@ -260,6 +254,15 @@ const AirlineDetails = () => {
 
   return (
     <div className="container mx-auto px-4 py-20">
+      {/* Success message notification */}
+      {successMessage && (
+        <div className="fixed top-20 left-0 right-0 flex justify-center z-50">
+          <div className="bg-green-100 border border-green-400 text-green-700 px-4 py-3 rounded shadow-lg">
+            {successMessage}
+          </div>
+        </div>
+      )}
+      
       <div className="bg-white rounded-lg shadow-md p-6 mb-8">
         <h1 className="text-3xl font-bold mb-4 text-blue-600">{airline.name}</h1>
         <div className="flex items-center mb-4">

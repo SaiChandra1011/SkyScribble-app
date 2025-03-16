@@ -161,7 +161,8 @@ const ReviewForm = ({ airlineId, userId, onSuccess, onCancel }) => {
       
       // Submission with proper error handling and no alerts
       try {
-        await createReview(reviewData);
+        const response = await createReview(reviewData);
+        console.log("Review created successfully:", response);
         
         // Clear form
         setFormData({
@@ -173,19 +174,15 @@ const ReviewForm = ({ airlineId, userId, onSuccess, onCancel }) => {
         });
         setSelectedImage(null);
         setImagePreview(null);
+        setSubmitting(false);
         
-        // Important: Force page reload to show the new review
-        // First call onSuccess to notify parent
+        // Call the success handler to let the parent component handle the update
         if (typeof onSuccess === 'function') {
           onSuccess();
         }
-
-        // As a fallback, if parent handler doesn't refresh the page, do it directly
-        // Use a slight delay to allow state changes to take effect
-        setTimeout(() => {
-          window.location.reload();
-        }, 500);
         
+        // Don't use window.location.reload() as it causes the 404 error
+        // Let React Router and the parent component handle navigation
       } catch (err) {
         console.error("Error in review submission:", err);
         setError(err.message || "Failed to submit review. Please try again.");
