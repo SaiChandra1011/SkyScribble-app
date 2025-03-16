@@ -15,5 +15,18 @@
         }
       ]
     }
-  ]
+  ],
+  "github": {
+    "enabled": true,
+    "silent": true,
+    "autoJobCancelation": true
+  },
+  "git": {
+    "deploymentEnabled": {
+      "main": false,
+      "new-main": false,
+      "new-main-branch": false,
+      "working-version": true
+    }
+  }
 } 
