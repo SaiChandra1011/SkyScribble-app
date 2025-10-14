@@ -1,5 +1,11 @@
 # SkyScribble - Airline Review Application
 
+ERD for the SkyScribble
+
+<img width="659" height="553" alt="image" src="https://github.com/user-attachments/assets/146528d2-0c3e-4191-93b0-f93b8e4cc76a" />
+
+
+
 A full-stack application for users to read and write reviews for airlines.
 
 ## Features
